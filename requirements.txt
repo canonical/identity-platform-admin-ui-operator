@@ -1,0 +1,5 @@
+cosl
+ops >= 2.3.0
+lightkube
+lightkube-models
+jsonschema

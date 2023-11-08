@@ -1,0 +1,42 @@
+# Copyright 2022 Canonical Ltd.
+# See LICENSE file for licensing details.
+
+name: identity-platform-admin-ui-operator
+assumes:
+  - k8s-api
+
+description: |
+  Charmed Operator for Canonical Identity Platform's Admin Interface.
+
+  The Identity Platform Admin UI provides users a graphic interface
+  to display the real-time status of the Identity Platform, as well
+  as to make granular adjustments. 
+summary: |
+  Identity and user management system
+containers:
+  admin-ui:
+    resource: oci-image
+resources:
+  oci-image:
+    type: oci-image
+    description: Identity Platform Admin UI oci-image
+    upstream-source: ghcr.io/canonical/identity-platform-admin-ui:latest
+requires:
+  ingress:
+    interface: ingress
+  logging:
+    interface: loki_push_api
+    limit: 1
+  tracing:
+    interface: tracing
+    limit: 1
+
+provides:
+  metrics-endpoint:
+    interface: prometheus_scrape
+    description: |
+      Provides application metrics to Prometheus deployment
+  grafana-dashboard:
+    description: |
+      Forwards dashboards to Grafana deployment 
+    interface: grafana_dashboard

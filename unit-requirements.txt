@@ -1,0 +1,6 @@
+pytest
+pytest-mock
+coverage[toml]
+requests
+pydantic<2.0
+-r requirements.txt

@@ -6,7 +6,7 @@
 """Test functions for unit testing Identity Platform Admin UI Operator."""
 import json
 
-from ops.model import ActiveStatus, WaitingStatus
+from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from ops.testing import Harness
 
 CONTAINER_NAME = "admin-ui"
@@ -64,6 +64,56 @@ def setup_tempo_relation(harness: Harness) -> int:
     return relation_id
 
 
+def setup_kratos_relation(harness: Harness) -> int:
+    relation_id = harness.add_relation("kratos-admin-endpoint", "kratos")
+    harness.add_relation_unit(relation_id, "kratos/0")
+
+    databag = {
+        "admin_endpoint": f"http://kratos-admin-url:80/{harness.model.name}-kratos",
+        "public_endpoint": f"http://kratos-public-url:80/{harness.model.name}-kratos",
+        "model": harness.model.name,
+        "idp_configmap": "test-idp-cm",
+        "schemas_configmap": "test-schemas-cm",
+    }
+    harness.update_relation_data(
+        relation_id,
+        "kratos",
+        databag,
+    )
+    return relation_id
+
+
+def setup_hydra_relation(harness: Harness) -> int:
+    relation_id = harness.add_relation("hydra-admin-endpoint", "hydra")
+    harness.add_relation_unit(relation_id, "hydra/0")
+
+    databag = {"admin_endpoint": f"http://hydra-admin-url:80/{harness.model.name}-hydra"}
+    harness.update_relation_data(
+        relation_id,
+        "hydra",
+        databag,
+    )
+    return relation_id
+
+
+def setup_oathkeeper_relation(harness: Harness) -> int:
+    relation_id = harness.add_relation("oathkeeper-admin-endpoint", "oathkeeper")
+    harness.add_relation_unit(relation_id, "oathkeeper/0")
+
+    databag = {
+        "public_endpoint": f"http://oathkeeper-url:80/{harness.model.name}-oathkeeper",
+        "rules_configmap": "test-rules-cm",
+        "rules_file": "test-rules-file",
+        "model": harness.model.name,
+    }
+    harness.update_relation_data(
+        relation_id,
+        "oathkeeper",
+        databag,
+    )
+    return relation_id
+
+
 # Unit tests for Charm events
 
 
@@ -74,8 +124,7 @@ def test_on_config_changed(harness: Harness) -> None:
 
     harness.update_config(
         {
-            "kratos_public_url": "http://updated-kratos-public-url",
-            "kratos_admin_url": "http://updated-kratos-admin-url",
+            "log_level": "debug",
         }
     )
     harness.charm.on.config_changed.emit()
@@ -90,18 +139,11 @@ def test_on_config_changed(harness: Harness) -> None:
                 "command": "/usr/bin/identity-platform-admin-ui",
                 "startup": "enabled",
                 "environment": {
-                    "KRATOS_PUBLIC_URL": "http://updated-kratos-public-url",
-                    "KRATOS_ADMIN_URL": "http://updated-kratos-admin-url",
-                    "HYDRA_ADMIN_URL": "http://hydra-admin.default.svc.cluster.local:4445",
-                    "IDP_CONFIGMAP_NAME": "idps",
-                    "IDP_CONFIGMAP_NAMESPACE": "default",
-                    "SCHEMAS_CONFIGMAP_NAME": "identity-schemas",
-                    "SCHEMAS_CONFIGMAP_NAMESPACE": "default",
                     "PORT": "8080",
                     "TRACING_ENABLED": False,
-                    "LOG_LEVEL": "info",
+                    "LOG_LEVEL": "debug",
                     "LOG_FILE": "/var/log/admin_ui.log",
-                    "DEBUG": False,
+                    "DEBUG": True,
                 },
             }
         },
@@ -135,6 +177,10 @@ def test_install_can_connect(harness: Harness) -> None:
     harness.set_leader(True)
     harness.set_can_connect(CONTAINER_NAME, True)
     harness.charm.on.admin_ui_pebble_ready.emit(CONTAINER_NAME)
+
+    setup_kratos_relation(harness)
+    setup_hydra_relation(harness)
+    setup_oathkeeper_relation(harness)
 
     assert harness.charm.unit.status == ActiveStatus()
     assert harness.get_workload_version() == "1.2.0"
@@ -179,6 +225,82 @@ def test_on_pebble_ready_with_loki(harness: Harness) -> None:
     harness.set_can_connect(CONTAINER_NAME, True)
     container = harness.model.unit.get_container(CONTAINER_NAME)
     harness.charm.on.admin_ui_pebble_ready.emit(container)
+    setup_kratos_relation(harness)
+    setup_hydra_relation(harness)
+    setup_oathkeeper_relation(harness)
     setup_loki_relation(harness)
 
     assert harness.model.unit.status == ActiveStatus()
+
+
+def test_iam_relations_missing(harness: Harness) -> None:
+    harness.set_leader(True)
+    harness.set_can_connect(CONTAINER_NAME, True)
+    container = harness.model.unit.get_container(CONTAINER_NAME)
+    harness.charm.on.admin_ui_pebble_ready.emit(container)
+
+    assert harness.charm.unit.status == BlockedStatus("Missing required relation with Kratos")
+
+
+def test_one_iam_relation_missing(harness: Harness) -> None:
+    harness.set_leader(True)
+    harness.set_can_connect(CONTAINER_NAME, True)
+    container = harness.model.unit.get_container(CONTAINER_NAME)
+    harness.charm.on.admin_ui_pebble_ready.emit(container)
+
+    setup_kratos_relation(harness)
+    setup_hydra_relation(harness)
+
+    assert harness.charm.unit.status == BlockedStatus("Missing required relation with Oathkeeper")
+
+
+def layer_updated_with_iam_relations(harness: Harness) -> None:
+    harness.set_leader(True)
+    harness.set_can_connect(CONTAINER_NAME, True)
+    container = harness.model.unit.get_container(CONTAINER_NAME)
+    harness.charm.on.admin_ui_pebble_ready.emit(container)
+
+    setup_kratos_relation(harness)
+    setup_hydra_relation(harness)
+    setup_oathkeeper_relation(harness)
+
+    assert harness.model.unit.status == ActiveStatus()
+
+    expected_layer = {
+        "summary": "Pebble Layer for Identity Platform Admin UI",
+        "description": "Pebble Layer for Identity Platform Admin UI",
+        "services": {
+            CONTAINER_NAME: {
+                "override": "replace",
+                "summary": "identity platform admin ui",
+                "command": "/usr/bin/identity-platform-admin-ui",
+                "startup": "enabled",
+                "environment": {
+                    "KRATOS_PUBLIC_URL": "http://kratos-admin-url:80/testing-kratos",
+                    "KRATOS_ADMIN_URL": "http://kratos-public-url:80/testing-kratos",
+                    "HYDRA_ADMIN_URL": "http://hydra-admin-url:80/testing-hydra",
+                    "OATHKEEPER_PUBLIC_URL": "http://oathkeeper-url:80/testing-oathkeeper",
+                    "IDP_CONFIGMAP_NAME": "test-idp-cm",
+                    "IDP_CONFIGMAP_NAMESPACE": "testing",
+                    "SCHEMAS_CONFIGMAP_NAME": "test-schemas-cm",
+                    "SCHEMAS_CONFIGMAP_NAMESPACE": "testing",
+                    "RULES_CONFIGMAP_NAME": "test-rules-cm",
+                    "RULES_CONFIGMAP_FILE_NAME": "test-rules-file",
+                    "RULES_CONFIGMAP_NAMESPACE": "testing",
+                    "PORT": "8080",
+                    "TRACING_ENABLED": False,
+                    "LOG_LEVEL": "info",
+                    "LOG_FILE": "/var/log/admin_ui.log",
+                    "DEBUG": False,
+                },
+            }
+        },
+        "checks": {
+            "alive": {
+                "override": "replace",
+                "http": {"url": "http://localhost:8080/api/v0/status"},
+            },
+        },
+    }
+
+    assert harness.charm._admin_ui_pebble_layer.to_dict() == expected_layer

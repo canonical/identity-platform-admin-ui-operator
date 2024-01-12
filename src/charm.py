@@ -10,6 +10,12 @@ import re
 from typing import Optional
 
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
+from charms.identity_platform_admin_ui_operator.v0.admin_ui_service import (
+    AdminUIServiceRelationError,
+    HydraAdminUIServiceRequirer,
+    KratosAdminUIServiceRequirer,
+    OathkeeperAdminUIServiceRequirer,
+)
 from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer, PromtailDigestError
 from charms.observability_libs.v0.kubernetes_service_patch import KubernetesServicePatch
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
@@ -27,9 +33,12 @@ from ops.pebble import ChangeError, Error, Layer
 from constants import (
     ADMIN_UI_COMMAND,
     GRAFANA_DASHBOARD_INTEGRATION_NAME,
+    HYDRA_ADMIN_UI_RELATION_NAME,
+    KRATOS_ADMIN_UI_RELATION_NAME,
     LOG_DIR,
     LOG_FILE,
     LOKI_API_PUSH_INTEGRATION_NAME,
+    OAUTHKEEPER_ADMIN_UI_RELATION_NAME,
     PROMETHEUS_SCRAPE_INTEGRATION_NAME,
     SERVICE_NAME,
     TEMPO_TRACING_INTEGRATION_NAME,
@@ -90,7 +99,16 @@ class IdentityPlatformAdminUiOperatorCharm(CharmBase):
             self, relation_name=GRAFANA_DASHBOARD_INTEGRATION_NAME
         )
 
-        # TODO: Initialize Identity Platform Relations
+        # Initialize Identity Platform Relations
+        self.kratos_interface = KratosAdminUIServiceRequirer(
+            charm=self, relation_name=KRATOS_ADMIN_UI_RELATION_NAME
+        )
+        self.hydra_interface = HydraAdminUIServiceRequirer(
+            charm=self, relation_name=HYDRA_ADMIN_UI_RELATION_NAME
+        )
+        self.oathkeeper_interface = OathkeeperAdminUIServiceRequirer(
+            charm=self, relation_name=OAUTHKEEPER_ADMIN_UI_RELATION_NAME
+        )
 
         # Register Charm Event Handlers
         self.framework.observe(self.on.admin_ui_pebble_ready, self._on_admin_ui_pebble_ready)
@@ -105,10 +123,19 @@ class IdentityPlatformAdminUiOperatorCharm(CharmBase):
             self._promtail_error,
         )
 
-        # TODO: Register Identity Platform Event Handlers
+        # Register Identity Platform Event Handlers
+        self.framework.observe(
+            self.on[KRATOS_ADMIN_UI_RELATION_NAME].relation_changed, self._on_config_changed
+        )
+        self.framework.observe(
+            self.on[HYDRA_ADMIN_UI_RELATION_NAME].relation_changed, self._on_config_changed
+        )
+        self.framework.observe(
+            self.on[OAUTHKEEPER_ADMIN_UI_RELATION_NAME].relation_changed, self._on_config_changed
+        )
 
     # Event Handlers
-    # Charm event handlers"""
+    # Charm event handlers
 
     def _on_admin_ui_pebble_ready(self, event: WorkloadEvent) -> None:
         """Define and start a workload using the Pebble API."""
@@ -150,6 +177,23 @@ class IdentityPlatformAdminUiOperatorCharm(CharmBase):
             return
 
         self.unit.status = MaintenanceStatus("Configuration in progress")
+
+        # Check required relations
+
+        if not self.model.relations[KRATOS_ADMIN_UI_RELATION_NAME]:
+            self.unit.status = BlockedStatus("Missing required relation with Kratos")
+            event.defer()
+            return
+
+        if not self.model.relations[HYDRA_ADMIN_UI_RELATION_NAME]:
+            self.unit.status = BlockedStatus("Missing required relation with Hydra")
+            event.defer()
+            return
+
+        if not self.model.relations[OAUTHKEEPER_ADMIN_UI_RELATION_NAME]:
+            self.unit.status = BlockedStatus("Missing required relation with Oathkeeper")
+            event.defer()
+            return
 
         self._container.add_layer(SERVICE_NAME, self._admin_ui_pebble_layer, combine=True)
         logger.info("Pebble plan updated with new configuration, replanning")
@@ -209,20 +253,39 @@ class IdentityPlatformAdminUiOperatorCharm(CharmBase):
             "command": ADMIN_UI_COMMAND,
             "startup": "enabled",
             "environment": {
-                "KRATOS_PUBLIC_URL": self._kratos_public_url,
-                "KRATOS_ADMIN_URL": self._kratos_admin_url,
-                "HYDRA_ADMIN_URL": self._hydra_admin_url,
-                "IDP_CONFIGMAP_NAME": self._idp_configmap_name,
-                "IDP_CONFIGMAP_NAMESPACE": self._idp_configmap_namespace,
-                "SCHEMAS_CONFIGMAP_NAME": self._schemas_configmap_name,
-                "SCHEMAS_CONFIGMAP_NAMESPACE": self._schemas_configmap_namespace,
                 "PORT": self._port,
                 "TRACING_ENABLED": False,
                 "LOG_LEVEL": self._log_level,
                 "LOG_FILE": str(LOG_FILE),
-                "DEBUG": self._log_level == "DEBUG",
+                "DEBUG": self._log_level.upper() == "DEBUG",
             },
         }
+
+        try:
+            data = self.kratos_interface.get_relation_data()
+            container["environment"]["KRATOS_PUBLIC_URL"] = data["public_endpoint"]
+            container["environment"]["KRATOS_ADMIN_URL"] = data["admin_endpoint"]
+            container["environment"]["IDP_CONFIGMAP_NAME"] = data["idp_configmap"]
+            container["environment"]["IDP_CONFIGMAP_NAMESPACE"] = data["model"]
+            container["environment"]["SCHEMAS_CONFIGMAP_NAME"] = data["schemas_configmap"]
+            container["environment"]["SCHEMAS_CONFIGMAP_NAMESPACE"] = data["model"]
+        except AdminUIServiceRelationError as err:
+            logger.error(str(err))
+
+        try:
+            data = self.hydra_interface.get_relation_data()
+            container["environment"]["HYDRA_ADMIN_URL"] = data["admin_endpoint"]
+        except AdminUIServiceRelationError as err:
+            logger.error(str(err))
+
+        try:
+            data = self.oathkeeper_interface.get_relation_data()
+            container["environment"]["OATHKEEPER_PUBLIC_URL"] = data["public_endpoint"]
+            container["environment"]["RULES_CONFIGMAP_NAME"] = data["rules_configmap"]
+            container["environment"]["RULES_CONFIGMAP_FILE_NAME"] = data["rules_file"]
+            container["environment"]["RULES_CONFIGMAP_NAMESPACE"] = data["model"]
+        except AdminUIServiceRelationError as err:
+            logger.error(str(err))
 
         if self._tracing_ready:
             container["environment"]["OTEL_HTTP_ENDPOINT"] = self._tracing_endpoint_info_http
@@ -271,34 +334,6 @@ class IdentityPlatformAdminUiOperatorCharm(CharmBase):
     @property
     def _port(self) -> str:
         return self.config["port"]
-
-    @property
-    def _kratos_public_url(self) -> str:
-        return self.config["kratos_public_url"]
-
-    @property
-    def _kratos_admin_url(self) -> str:
-        return self.config["kratos_admin_url"]
-
-    @property
-    def _hydra_admin_url(self) -> str:
-        return self.config["hydra_admin_url"]
-
-    @property
-    def _idp_configmap_name(self) -> str:
-        return self.config["idp_configmap_name"]
-
-    @property
-    def _idp_configmap_namespace(self) -> str:
-        return self.config["idp_configmap_namespace"]
-
-    @property
-    def _schemas_configmap_name(self) -> str:
-        return self.config["schemas_configmap_name"]
-
-    @property
-    def _schemas_configmap_namespace(self) -> str:
-        return self.config["schemas_configmap_namespace"]
 
 
 if __name__ == "__main__":  # pragma: nocover

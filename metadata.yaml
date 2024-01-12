@@ -30,7 +30,15 @@ requires:
   tracing:
     interface: tracing
     limit: 1
-
+  hydra-admin-endpoint:
+    interface: admin_ui_service
+    limit: 1
+  kratos-admin-endpoint:
+    interface: admin_ui_service
+    limit: 1
+  oathkeeper-admin-endpoint:
+    interface: admin_ui_service
+    limit: 1
 provides:
   metrics-endpoint:
     interface: prometheus_scrape

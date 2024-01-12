@@ -22,6 +22,9 @@ LIBAPI = 0
 LIBPATCH = 1
 
 INTERFACE_NAME = "admin_ui_service"
+HYDRA_RELATION_NAME = "hydra-admin-endpoint"
+KRATOS_RELATION_NAME = "kratos-admin-endpoint"
+OAUTHKEEPER_RELATION_NAME = "oathkeeper-admin-endpoint"
 logger = logging.getLogger(__name__)
 
 # Generic Classes for relation. Please use appropriate subclass for the relation.
@@ -107,3 +110,138 @@ class GenericAdminUIServiceRequirer(Object):
             )
 
         return relation[0].data[relation[0].app]
+
+
+# Subclasses for relation with Kratos Charm
+
+
+class KratosAdminUIServiceProvider(GenericAdminUIServiceProvider):
+    """Helper provider subclass for relation with Kratos Provider"""
+
+    def __init__(self, charm: CharmBase, relation_name: str = KRATOS_RELATION_NAME):
+        super().__init__(charm, relation_name)
+
+    def send_relation_data_for_admin_ui(self, admin_endpoint: str, public_endpoint: str, model_name: str, idp_configmap: str, schemas_configmap: str) -> None:
+        """Updates relation with data specific to Kratos administration"""
+
+        super().send_relation_data_for_admin_ui(
+            {
+                "admin_endpoint": admin_endpoint,
+                "public_endpoint": public_endpoint,
+                "model": model_name,
+                "idp_configmap": idp_configmap,
+                "schemas_configmap": schemas_configmap,
+            }
+        )
+
+
+class KratosAdminUIServiceRequirer(GenericAdminUIServiceRequirer):
+    """Helper requirer subclass for relation with Kratos Provider"""
+
+    def __init__(self, charm: CharmBase, relation_name: str = KRATOS_RELATION_NAME) -> None:
+        super().__init__(charm, relation_name)
+
+    def get_relation_data(self) -> Dict:
+        data = super().get_relation_data()
+
+        for field in [
+            "admin_endpoint",
+            "public_endpoint",
+            "model",
+            "idp_configmap",
+            "schemas_configmap"
+        ]:
+            if field not in data:
+                raise AdminUIServiceRelationDataMissingError(f"Missing {field} field in relation data")
+
+        return {
+            "admin_endpoint": data["admin_endpoint"],
+            "public_endpoint": data["public_endpoint"],
+            "model": data["model"],
+            "idp_configmap": data["idp_configmap"],
+            "schemas_configmap": data["schemas_configmap"],
+        }
+
+
+# Subclasses for relation with Hydra Charm
+
+
+class HydraAdminUIServiceProvider(GenericAdminUIServiceProvider):
+    """Helper provider subclass for relation with Hydra Provider"""
+
+    def __init__(self, charm: CharmBase, relation_name: str = HYDRA_RELATION_NAME):
+        super().__init__(charm, relation_name)
+
+    def send_relation_data_for_admin_ui(self, admin_endpoint: str) -> None:
+        """Updates relation with data specific to Hydra administration"""
+
+        super().send_relation_data_for_admin_ui(
+            {
+                "admin_endpoint": admin_endpoint,
+            }
+        )
+
+
+class HydraAdminUIServiceRequirer(GenericAdminUIServiceRequirer):
+    """Helper requirer subclass for relation with Hydra Provider"""
+
+    def __init__(self, charm: CharmBase, relation_name: str = HYDRA_RELATION_NAME) -> None:
+        super().__init__(charm, relation_name)
+
+    def get_relation_data(self) -> Dict:
+        data = super().get_relation_data()
+
+        if "admin_endpoint" not in data:
+            raise AdminUIServiceRelationDataMissingError("Missing admin_endpoint field in relation data")
+
+        return {
+            "admin_endpoint": data["admin_endpoint"]
+        }
+
+
+# Subclasses for relation with Oathkeeper Charm
+
+
+class OathkeeperAdminUIServiceProvider(GenericAdminUIServiceProvider):
+    """Helper provider subclass for relation with Oathkeeper Provider"""
+
+    def __init__(self, charm: CharmBase, relation_name: str = OAUTHKEEPER_RELATION_NAME):
+        super().__init__(charm, relation_name)
+
+    def send_relation_data_for_admin_ui(self, public_endpoint: str, rules_configmap: str, rules_file: str, model: str) -> None:
+        """Updates relation with data specific to Oathkeeper administration"""
+
+        super().send_relation_data_for_admin_ui(
+            {
+                "public_endpoint": public_endpoint,
+                "rules_configmap": rules_configmap,
+                "rules_file": rules_file,
+                "model": model,
+            }
+        )
+
+
+class OathkeeperAdminUIServiceRequirer(GenericAdminUIServiceRequirer):
+    """Helper class for relation with Oathkeeper Provider"""
+
+    def __init__(self, charm: CharmBase, relation_name: str = OAUTHKEEPER_RELATION_NAME) -> None:
+        super().__init__(charm, relation_name)
+
+    def get_relation_data(self) -> Dict:
+        data = super().get_relation_data()
+
+        for field in [
+            "public_endpoint",
+            "model",
+            "rules_configmap",
+            "rules_file"
+        ]:
+            if field not in data:
+                raise AdminUIServiceRelationDataMissingError(f"Missing {field} field in relation data")
+
+        return {
+            "public_endpoint": data["public_endpoint"],
+            "rules_configmap": data["rules_configmap"],
+            "rules_file": data["rules_file"],
+            "model": data["model"],
+        }

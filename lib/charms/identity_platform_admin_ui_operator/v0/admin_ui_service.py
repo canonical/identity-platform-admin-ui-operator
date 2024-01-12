@@ -2,8 +2,42 @@
 # Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-"""Description
+"""Interface library for providing for sharing application information between the Identity Platform Admin UI
+charm and the Kratos, Hydra, and Oathkeeper charms.
+This library provides a Python API for both requesting and providing endpoints and Kubernetes metadata, that is appropriate
+for the relation between Admin UI and the specific Identity Platform Component.
+## Getting Started
+To get started using the library, you need to fetch the library using `charmcraft`.
+```shell
+cd some-charm
+charmcraft fetch-lib charms.identity_platform_admin_ui.v0.admin_ui_service
+```
+To use the library with the Kratos charm:
+In the `metadata.yaml` of the charm, add the following:
+```yaml
+provides:
+  kratos-admin-endpoint:
+    interface: admin_ui_service
+```
+Then, to initialise the library:
+```python
+from charms.identity_platform_admin_ui_operator.v0.admin_ui_service import (
+    KratosAdminUIServiceProvider,
+)
+Class SomeCharm(CharmBase):
+    def __init__(self, *args):
+        self.admin_ui_provider = KratosAdminUIServiceProvider(self)
+        self.framework.observe(
+            self.admin_ui_provider.on.ready, self.some_event_function
+        )
+    def some_event_function():
+        self.admin_ui_provider.send_relation_data_for_admin_ui(
+            ...
+        )
+            ...
+```
 """
+
 
 import logging
 from typing import Dict

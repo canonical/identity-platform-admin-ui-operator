@@ -156,7 +156,7 @@ class TestPebbleReadyEvent:
                 WORKLOAD_SERVICE_NAME: {
                     "override": "replace",
                     "summary": "identity platform admin ui",
-                    "command": "/usr/bin/identity-platform-admin-ui",
+                    "command": "/usr/bin/identity-platform-admin-ui serve",
                     "startup": "enabled",
                     "environment": {
                         "KRATOS_PUBLIC_URL": "http://kratos-url.com",
@@ -166,6 +166,10 @@ class TestPebbleReadyEvent:
                         "IDP_CONFIGMAP_NAMESPACE": "testing",
                         "SCHEMAS_CONFIGMAP_NAME": "identity-schemas",
                         "SCHEMAS_CONFIGMAP_NAMESPACE": "testing",
+                        "OATHKEEPER_PUBLIC_URL": "",
+                        "RULES_CONFIGMAP_NAME": "access-rules",
+                        "RULES_CONFIGMAP_NAMESPACE": "testing",
+                        "RULES_CONFIGMAP_FILE_NAME": "admin_ui_rules.json",
                         "PORT": "8080",
                         "TRACING_ENABLED": False,
                         "LOG_LEVEL": "info",

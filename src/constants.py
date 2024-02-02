@@ -10,7 +10,7 @@ WORKLOAD_CONTAINER_NAME = "admin-ui"
 WORKLOAD_SERVICE_NAME = "admin-ui"
 
 # Application constants
-ADMIN_UI_COMMAND = "/usr/bin/identity-platform-admin-ui"
+ADMIN_UI_COMMAND = "/usr/bin/identity-platform-admin-ui serve"
 ADMIN_UI_PORT = 8080
 LOG_DIR = PurePath("/var/log")
 LOG_FILE = LOG_DIR / "admin_ui.log"

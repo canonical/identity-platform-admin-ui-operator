@@ -27,7 +27,7 @@ from charms.traefik_k8s.v2.ingress import (
     IngressPerAppRequirer,
     IngressPerAppRevokedEvent,
 )
-from ops.charm import CharmBase, ConfigChangedEvent, HookEvent, InstallEvent, WorkloadEvent
+from ops.charm import CharmBase, ConfigChangedEvent, HookEvent, WorkloadEvent
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from ops.pebble import ChangeError, Error, Layer
@@ -106,7 +106,6 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
 
         self.framework.observe(self.on.admin_ui_pebble_ready, self._on_admin_ui_pebble_ready)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
-        self.framework.observe(self.on.install, self._on_install)
 
         self.framework.observe(self.ingress.on.ready, self._on_ingress_ready)
         self.framework.observe(self.ingress.on.revoked, self._on_ingress_revoked)
@@ -126,40 +125,16 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             self._promtail_error,
         )
 
-    def _on_install(self, event: InstallEvent) -> None:
-        if not self._container.can_connect():
-            event.defer()
-            logger.info("Cannot connect to admin-ui container. Deferring the event.")
-            self.unit.status = WaitingStatus("Waiting to connect to admin-ui container")
-            return
-
-        # Make sure the directory for the logfile exists
-        # Duplicated to avoid race condition between install and pebble_ready events.
-        if not self._container.isdir(LOG_DIR):
-            self._container.make_dir(path=LOG_DIR, make_parents=True)
-            logger.info(f"Created directory {LOG_DIR}")
-
     def _on_admin_ui_pebble_ready(self, event: WorkloadEvent) -> None:
         """Define and start a workload using the Pebble API."""
         self.unit.open_port(protocol="tcp", port=ADMIN_UI_PORT)
 
-        if not self._container.can_connect():
-            event.defer()
-            logger.info("Cannot connect to admin-ui container. Deferring the event.")
-            self.unit.status = WaitingStatus("Waiting to connect to admin-ui container")
-            return
-
-        # Make sure the directory for the logfile exists
-        if not self._container.isdir(str(LOG_DIR)):
-            self._container.make_dir(path=str(LOG_DIR), make_parents=True)
-            logger.info(f"Created directory {LOG_DIR}")
-
         self._set_version()
-        self._update_pebble_layer(event)
+        self._handle_status_update_config(event)
 
     def _on_config_changed(self, event: ConfigChangedEvent) -> None:
         """Handle changed configuration."""
-        self._update_pebble_layer(event)
+        self._handle_status_update_config(event)
 
     def _on_ingress_ready(self, event: IngressPerAppReadyEvent) -> None:
         if self.unit.is_leader():
@@ -169,7 +144,7 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         if self.unit.is_leader():
             logger.info("This app no longer has ingress")
 
-    def _update_pebble_layer(self, event: HookEvent) -> None:
+    def _handle_status_update_config(self, event: HookEvent) -> None:
         if not self._container.can_connect():
             event.defer()
             logger.info("Cannot connect to admin-ui container. Deferring the event.")
@@ -177,6 +152,11 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             return
 
         self.unit.status = MaintenanceStatus("Configuring the container")
+
+        # Make sure the directory for the logfile exists
+        if not self._container.isdir(str(LOG_DIR)):
+            self._container.make_dir(path=str(LOG_DIR), make_parents=True)
+            logger.info(f"Created directory {LOG_DIR}")
 
         self._container.add_layer(
             WORKLOAD_CONTAINER_NAME, self._admin_ui_pebble_layer, combine=True

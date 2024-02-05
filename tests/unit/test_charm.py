@@ -106,24 +106,6 @@ def setup_tempo_relation(harness: Harness) -> int:
     return relation_id
 
 
-class TestInstallEvent:
-    def test_cannot_connect_on_install(self, harness: Harness) -> None:
-        harness.set_can_connect(WORKLOAD_CONTAINER_NAME, False)
-        harness.charm.on.admin_ui_pebble_ready.emit(WORKLOAD_CONTAINER_NAME)
-
-        assert harness.charm.unit.status == WaitingStatus(
-            "Waiting to connect to admin-ui container"
-        )
-
-    def test_log_dir_created_on_install(self, harness: Harness) -> None:
-        harness.set_can_connect(WORKLOAD_CONTAINER_NAME, True)
-        harness.charm.on.install.emit()
-
-        container = harness.model.unit.get_container(WORKLOAD_CONTAINER_NAME)
-        assert container.exists(LOG_DIR)
-        assert container.isdir(LOG_DIR)
-
-
 class TestPebbleReadyEvent:
     def test_cannot_connect_on_pebble_ready(self, harness: Harness) -> None:
         harness.set_can_connect(WORKLOAD_CONTAINER_NAME, False)

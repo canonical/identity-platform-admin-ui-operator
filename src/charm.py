@@ -30,7 +30,7 @@ from charms.traefik_k8s.v2.ingress import (
 from ops.charm import CharmBase, ConfigChangedEvent, HookEvent, WorkloadEvent
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
-from ops.pebble import ChangeError, Error, Layer
+from ops.pebble import ChangeError, ExecError, Layer
 
 from constants import (
     ADMIN_UI_COMMAND,
@@ -129,7 +129,6 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         """Define and start a workload using the Pebble API."""
         self.unit.open_port(protocol="tcp", port=ADMIN_UI_PORT)
 
-        self._set_version()
         self._handle_status_update_config(event)
 
     def _on_config_changed(self, event: ConfigChangedEvent) -> None:
@@ -170,6 +169,7 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             self.unit.status = BlockedStatus("Failed to replan, please consult the logs")
             return
 
+        self._set_version()
         self.unit.status = ActiveStatus()
 
     def _get_hydra_endpoint_info(self) -> str:
@@ -198,11 +198,12 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         logger.error(event.message)
 
     def _get_version(self) -> Optional[str]:
-        cmd = ["identity-platform-admin-ui", "--version"]
+        cmd = ["identity-platform-admin-ui", "version"]
         try:
             process = self._container.exec(cmd)
             stdout, _ = process.wait_output()
-        except Error:
+        except ExecError as err:
+            logger.error(f"Exited with code {err.exit_code}. Stderr: {err.stderr}")
             return
 
         out_re = r"App Version:\s*(.+)\s*$"
@@ -213,7 +214,7 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
     def _set_version(self) -> None:
         if version := self._get_version():
             self.unit.set_workload_version(version)
-            logger.info(f"Version: {version}")
+            logger.info(f"Set workload version: {version}")
 
     @property
     def _admin_ui_pebble_layer(self) -> Layer:

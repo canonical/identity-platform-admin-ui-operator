@@ -24,7 +24,7 @@ def harness() -> Generator[Harness, None, None]:
 @pytest.fixture(autouse=True)
 def mocked_get_version(harness: Harness):
     harness.handle_exec(
-        "admin-ui", ["identity-platform-admin-ui", "--version"], result="App Version: 1.2.0"
+        "admin-ui", ["identity-platform-admin-ui", "version"], result="App Version: 1.2.0"
     )
 
 

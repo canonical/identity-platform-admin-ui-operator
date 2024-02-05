@@ -1,7 +1,7 @@
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-name: identity-platform-admin-ui-operator
+name: identity-platform-admin-ui
 assumes:
   - k8s-api
 

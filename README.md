@@ -22,7 +22,7 @@ The Identity Platform Admin UI Operator offers integration with the [traefik-k8s
 If you have traefik deployed and configured in your juju model, run the following command to provide ingress:
 
 ```bash
-juju integrate traefik-k8s identity-platform-admin-ui-operator:ingress
+juju integrate traefik-k8s identity-platform-admin-ui:ingress
 ```
 
 ## Security

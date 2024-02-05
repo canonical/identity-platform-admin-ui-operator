@@ -47,8 +47,9 @@ jobs:
         if: failure()
 
       - name: Get juju logs
-        run: juju debug-log --replay --include identity-platform-admin-ui-operator/0
+        run: juju debug-log --replay --include identity-platform-admin-ui-0
         if: failure()
 
       - name: Get identity-platform-admin-ui-operator container logs
-        run: kubectl logs identity-platform-admin-ui-operator-0 -c admin-ui -n testing
+        run: kubectl logs identity-platform-admin-ui-0 -c admin-ui -n testing
+        if: failure()

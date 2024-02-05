@@ -19,7 +19,7 @@ def setup_ingress_relation(harness: Harness) -> Tuple[int, str]:
     """Set up ingress relation."""
     relation_id = harness.add_relation("ingress", "traefik")
     harness.add_relation_unit(relation_id, "traefik/0")
-    url = f"http://ingress:80/{harness.model.name}-identity-platform-admin-ui-operator"
+    url = f"http://ingress:80/{harness.model.name}-identity-platform-admin-ui"
     harness.update_relation_data(
         relation_id,
         "traefik",
@@ -238,12 +238,12 @@ class TestIngressRelation:
         harness.set_can_connect(WORKLOAD_CONTAINER_NAME, True)
 
         relation_id, url = setup_ingress_relation(harness)
-        assert url == "http://ingress:80/testing-identity-platform-admin-ui-operator"
+        assert url == "http://ingress:80/testing-identity-platform-admin-ui"
 
         app_data = harness.get_relation_data(relation_id, harness.charm.app)
         assert app_data == {
             "model": json.dumps(harness.model.name),
-            "name": json.dumps("identity-platform-admin-ui-operator"),
+            "name": json.dumps("identity-platform-admin-ui"),
             "port": json.dumps(8080),
             "scheme": json.dumps("http"),
             "strip-prefix": json.dumps(True),

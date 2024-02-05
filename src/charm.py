@@ -213,6 +213,7 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
     def _set_version(self) -> None:
         if version := self._get_version():
             self.unit.set_workload_version(version)
+            logger.info(f"Version: {version}")
 
     @property
     def _admin_ui_pebble_layer(self) -> Layer:

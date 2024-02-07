@@ -107,7 +107,9 @@ def setup_tempo_relation(harness: Harness) -> int:
 
 
 class TestPebbleReadyEvent:
-    def test_cannot_connect_on_pebble_ready(self, harness: Harness) -> None:
+    def test_cannot_connect_on_pebble_ready(
+        self, harness: Harness, mocked_version: MagicMock
+    ) -> None:
         harness.set_can_connect(WORKLOAD_CONTAINER_NAME, False)
         container = harness.model.unit.get_container(WORKLOAD_CONTAINER_NAME)
         harness.charm.on.admin_ui_pebble_ready.emit(container)

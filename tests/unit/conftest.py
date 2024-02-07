@@ -28,6 +28,11 @@ def mocked_get_version(harness: Harness):
     )
 
 
+@pytest.fixture()
+def mocked_version(mocker: MockerFixture) -> MagicMock:
+    return mocker.patch("charm.IdentityPlatformAdminUIOperatorCharm._set_version")
+
+
 @pytest.fixture(autouse=True)
 def mocked_log_proxy_consumer_setup_promtail(mocker: MockerFixture) -> MagicMock:
     mocked_setup_promtail = mocker.patch(

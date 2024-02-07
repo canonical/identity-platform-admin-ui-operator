@@ -131,6 +131,8 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
 
         self._handle_status_update_config(event)
 
+        self._set_version()
+
     def _on_config_changed(self, event: ConfigChangedEvent) -> None:
         """Handle changed configuration."""
         self._handle_status_update_config(event)
@@ -169,7 +171,6 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             self.unit.status = BlockedStatus("Failed to replan, please consult the logs")
             return
 
-        self._set_version()
         self.unit.status = ActiveStatus()
 
     def _get_hydra_endpoint_info(self) -> str:
@@ -224,6 +225,7 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             "KRATOS_PUBLIC_URL": self._get_kratos_endpoint_info("public_endpoint"),
             "HYDRA_ADMIN_URL": self._get_hydra_endpoint_info(),
             "IDP_CONFIGMAP_NAME": "providers",
+            # Kratos and Admin UI must be deployed in the same model
             "IDP_CONFIGMAP_NAMESPACE": self.model.name,
             "SCHEMAS_CONFIGMAP_NAME": "identity-schemas",
             "SCHEMAS_CONFIGMAP_NAMESPACE": self.model.name,

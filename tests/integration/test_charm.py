@@ -46,6 +46,11 @@ async def test_build_and_deploy(ops_test: OpsTest):
         trust=True,
     )
     await ops_test.model.deploy(
+        TRAEFIK,
+        channel="latest/edge",
+        config={"external_hostname": "some_hostname"},
+    )
+    await ops_test.model.deploy(
         entity_url=KRATOS,
         channel="latest/edge",
         series="jammy",
@@ -59,6 +64,7 @@ async def test_build_and_deploy(ops_test: OpsTest):
     )
 
     await ops_test.model.integrate(HYDRA, DB_APP)
+    await ops_test.model.integrate(f"{HYDRA}:public-ingress", TRAEFIK)
     await ops_test.model.integrate(KRATOS, DB_APP)
 
     await ops_test.model.integrate(f"{APP_NAME}:hydra-endpoint-info", HYDRA)
@@ -74,12 +80,6 @@ async def test_build_and_deploy(ops_test: OpsTest):
 
 
 async def test_ingress_relation(ops_test: OpsTest):
-    await ops_test.model.deploy(
-        TRAEFIK,
-        channel="latest/edge",
-        config={"external_hostname": "some_hostname"},
-    )
-
     await ops_test.model.add_relation(f"{APP_NAME}:ingress", TRAEFIK)
 
     await ops_test.model.wait_for_idle(

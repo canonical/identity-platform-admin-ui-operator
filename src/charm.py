@@ -152,6 +152,14 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             self.unit.status = WaitingStatus("Waiting to connect to admin-ui container")
             return
 
+        if not self.model.relations[KRATOS_ENDPOINTS_INTEGRATION_NAME]:
+            self.unit.status = BlockedStatus("Missing required relation with kratos")
+            return
+
+        if not self.model.relations[HYDRA_ENDPOINTS_INTEGRATION_NAME]:
+            self.unit.status = BlockedStatus("Missing required relation with hydra")
+            return
+
         self.unit.status = MaintenanceStatus("Configuring the container")
 
         # Make sure the directory for the logfile exists

@@ -9,7 +9,7 @@ from typing import Tuple
 from unittest.mock import MagicMock
 
 import pytest
-from ops.model import ActiveStatus, WaitingStatus
+from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from ops.testing import Harness
 
 from constants import LOG_DIR, WORKLOAD_CONTAINER_NAME, WORKLOAD_SERVICE_NAME
@@ -120,6 +120,8 @@ class TestPebbleReadyEvent:
         harness.set_can_connect(WORKLOAD_CONTAINER_NAME, True)
         container = harness.model.unit.get_container(WORKLOAD_CONTAINER_NAME)
         harness.charm.on.admin_ui_pebble_ready.emit(container)
+        setup_kratos_relation(harness)
+        setup_hydra_relation(harness)
 
         assert isinstance(harness.charm.unit.status, ActiveStatus)
         service = harness.model.unit.get_container(WORKLOAD_CONTAINER_NAME).get_service(
@@ -176,6 +178,8 @@ class TestPebbleReadyEvent:
         harness.set_can_connect(WORKLOAD_CONTAINER_NAME, True)
         container = harness.model.unit.get_container(WORKLOAD_CONTAINER_NAME)
         harness.charm.on.admin_ui_pebble_ready.emit(container)
+        setup_kratos_relation(harness)
+        setup_hydra_relation(harness)
 
         assert container.exists(LOG_DIR)
         assert container.isdir(LOG_DIR)
@@ -209,6 +213,13 @@ class TestTracingRelation:
 
 
 class TestKratosRelation:
+    def test_missing_required_kratos_relation(self, harness: Harness) -> None:
+        harness.set_can_connect(WORKLOAD_CONTAINER_NAME, True)
+        container = harness.model.unit.get_container(WORKLOAD_CONTAINER_NAME)
+        harness.charm.on.admin_ui_pebble_ready.emit(container)
+
+        assert harness.model.unit.status == BlockedStatus("Missing required relation with kratos")
+
     def test_layer_updated_with_kratos_endpoint_info(self, harness: Harness) -> None:
         harness.set_can_connect(WORKLOAD_CONTAINER_NAME, True)
         harness.charm.on.admin_ui_pebble_ready.emit(WORKLOAD_CONTAINER_NAME)
@@ -223,6 +234,14 @@ class TestKratosRelation:
 
 
 class TestHydraRelation:
+    def test_missing_required_hydra_relation(self, harness: Harness) -> None:
+        harness.set_can_connect(WORKLOAD_CONTAINER_NAME, True)
+        container = harness.model.unit.get_container(WORKLOAD_CONTAINER_NAME)
+        harness.charm.on.admin_ui_pebble_ready.emit(container)
+        setup_kratos_relation(harness)
+
+        assert harness.model.unit.status == BlockedStatus("Missing required relation with hydra")
+
     def test_layer_updated_with_hydra_endpoint_info(self, harness: Harness) -> None:
         harness.set_can_connect(WORKLOAD_CONTAINER_NAME, True)
         harness.charm.on.admin_ui_pebble_ready.emit(WORKLOAD_CONTAINER_NAME)

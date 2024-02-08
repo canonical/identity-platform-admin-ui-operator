@@ -15,6 +15,9 @@ logger = logging.getLogger(__name__)
 METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
 APP_NAME = METADATA["name"]
 TRAEFIK = "traefik-k8s"
+DB_APP = "postgresql-k8s"
+HYDRA = "hydra"
+KRATOS = "kratos"
 
 
 async def get_unit_address(ops_test: OpsTest, app_name: str, unit_num: int) -> str:
@@ -35,27 +38,52 @@ async def test_build_and_deploy(ops_test: OpsTest):
         charm, resources=resources, application_name=APP_NAME, trust=True, series="jammy"
     )
 
-    async with ops_test.fast_forward():
-        await ops_test.model.wait_for_idle(
-            apps=[APP_NAME],
-            status="active",
-            raise_on_blocked=True,
-            timeout=1000,
-        )
-        assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
-
-
-async def test_ingress_relation(ops_test: OpsTest):
+    # Deploy dependencies
+    await ops_test.model.deploy(
+        entity_url=DB_APP,
+        channel="14/stable",
+        series="jammy",
+        trust=True,
+    )
     await ops_test.model.deploy(
         TRAEFIK,
         channel="latest/edge",
         config={"external_hostname": "some_hostname"},
     )
+    await ops_test.model.deploy(
+        entity_url=KRATOS,
+        channel="latest/edge",
+        series="jammy",
+        trust=True,
+    )
+    await ops_test.model.deploy(
+        entity_url=HYDRA,
+        channel="latest/edge",
+        series="jammy",
+        trust=True,
+    )
 
+    await ops_test.model.integrate(HYDRA, DB_APP)
+    await ops_test.model.integrate(f"{HYDRA}:public-ingress", TRAEFIK)
+    await ops_test.model.integrate(KRATOS, DB_APP)
+
+    await ops_test.model.integrate(f"{APP_NAME}:hydra-endpoint-info", HYDRA)
+    await ops_test.model.integrate(f"{APP_NAME}:kratos-endpoint-info", KRATOS)
+
+    await ops_test.model.wait_for_idle(
+        apps=[APP_NAME, DB_APP, HYDRA, KRATOS],
+        status="active",
+        raise_on_blocked=False,
+        raise_on_error=True,
+        timeout=1000,
+    )
+
+
+async def test_ingress_relation(ops_test: OpsTest):
     await ops_test.model.add_relation(f"{APP_NAME}:ingress", TRAEFIK)
 
     await ops_test.model.wait_for_idle(
-        apps=[TRAEFIK],
+        apps=[APP_NAME, TRAEFIK],
         status="active",
         raise_on_blocked=True,
         timeout=1000,

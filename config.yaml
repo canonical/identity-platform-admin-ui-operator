@@ -1,51 +1,6 @@
-# This file defines charm config options, and populates the Configure tab on Charmhub.
-# If your charm does not require configuration options, delete this file entirely.
-#
-# See https://juju.is/docs/config for guidance.
-
 options:
   log_level:
     description: |
       Minimum log severity level. Acceptable values are: "info", "debug", "warning", "error"
     default: "info"
-    type: string
-  port:
-    description: |
-      Application port for Identity Platform Admin UI
-    default: "8080"
-    type: string
-  kratos_public_url:
-    description: |
-      URL endpoint for Kratos' public services
-    default: "http://kratos-public.default.svc.cluster.local"
-    type: string
-  kratos_admin_url:
-    description: |
-      URL endpoint for Kratos' admin services
-    default: "http://kratos-admin.default.svc.cluster.local"
-    type: string
-  hydra_admin_url:
-    description: |
-      URL endpoint for Hydra's admin services
-    default: "http://hydra-admin.default.svc.cluster.local:4445"
-    type: string
-  idp_configmap_name:
-    description: |
-      Name of Kubernetes configmap storing Identity Providers
-    default: "idps"
-    type: string
-  idp_configmap_namespace:
-    description: |
-      Name of Kubernetes namespace hosting the configmap with the Identity Providers
-    default: "default"
-    type: string
-  schemas_configmap_name:
-    description: |
-      Name of Kubernetes configmap storing Identity Schemas
-    default: "identity-schemas"
-    type: string
-  schemas_configmap_namespace:
-    description: |
-      Name of Kubernetes namespace hosting the configmap with the Identity Schemas
-    default: "default"
     type: string

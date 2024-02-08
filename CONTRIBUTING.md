@@ -6,14 +6,12 @@ This document explains the processes and practices recommended for contributing
 enhancements to this operator.
 
 - Generally, before developing bugs or enhancements to this charm, you
-  should [open an issue](https://github.com/canonical/kratos-operator/issues)
+  should [open an issue](https://github.com/canonical/identity-platform-admin-ui-operator/issues)
   explaining your use case.
-- If you would like to chat with us about charm development, you can reach
-  us
+- If you would like to chat with us about charm development, you can reach us 
   at [Canonical Mattermost public channel](https://chat.charmhub.io/charmhub/channels/charm-dev)
   or [Discourse](https://discourse.charmhub.io/).
-- Familiarising yourself with
-  the [Charmed Operator Framework](https://juju.is/docs/sdk) library
+- Familiarising yourself with the [Charmed Operator Framework](https://juju.is/docs/sdk) library
   will help you a lot when working on new features or bug fixes.
 - All enhancements require review before being merged. Code review typically
   examines:
@@ -60,7 +58,7 @@ juju add-model dev
 # Enable DEBUG logging
 juju model-config logging-config="<root>=INFO;unit=DEBUG"
 # Deploy the charm
-juju deploy ./identity_platform_admin_ui_operator_ubuntu-*-amd64.charm --resource oci-image=$(yq eval '.resources.oci-image.upstream-source' metadata.yaml)
+juju deploy ./identity-platform-admin-ui*-amd64.charm --resource oci-image=$(yq eval '.resources.oci-image.upstream-source' metadata.yaml) --trust
 ```
 
 ## Canonical Contributor Agreement

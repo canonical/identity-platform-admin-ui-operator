@@ -1,7 +1,7 @@
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-name: identity-platform-admin-ui-operator
+name: identity-platform-admin-ui
 assumes:
   - k8s-api
 
@@ -13,6 +13,7 @@ description: |
   as to make granular adjustments. 
 summary: |
   Identity and user management system
+
 containers:
   admin-ui:
     resource: oci-image
@@ -21,7 +22,14 @@ resources:
     type: oci-image
     description: Identity Platform Admin UI oci-image
     upstream-source: ghcr.io/canonical/identity-platform-admin-ui:latest
+
 requires:
+  hydra-endpoint-info:
+    interface: hydra_endpoints
+    limit: 1
+  kratos-endpoint-info:
+    interface: kratos_endpoints
+    limit: 1
   ingress:
     interface: ingress
   logging:

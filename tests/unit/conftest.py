@@ -50,14 +50,6 @@ def mocked_hydra_url(mocker: MockerFixture) -> MagicMock:
 
 
 @pytest.fixture()
-def mocked_kratos_url(mocker: MockerFixture) -> MagicMock:
-    return mocker.patch(
-        "charm.IdentityPlatformAdminUIOperatorCharm._get_kratos_endpoint_info",
-        return_value="http://kratos-url.com",
-    )
-
-
-@pytest.fixture()
 def mocked_log_level(mocker: MockerFixture) -> MagicMock:
     return mocker.patch(
         "charm.IdentityPlatformAdminUIOperatorCharm._log_level", return_value="warning"

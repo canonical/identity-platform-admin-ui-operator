@@ -68,7 +68,7 @@ async def test_build_and_deploy(ops_test: OpsTest):
     await ops_test.model.integrate(KRATOS, DB_APP)
 
     await ops_test.model.integrate(f"{APP_NAME}:hydra-endpoint-info", HYDRA)
-    await ops_test.model.integrate(f"{APP_NAME}:kratos-endpoint-info", KRATOS)
+    await ops_test.model.integrate(f"{APP_NAME}:kratos-info", KRATOS)
 
     await ops_test.model.wait_for_idle(
         apps=[APP_NAME, DB_APP, HYDRA, KRATOS],

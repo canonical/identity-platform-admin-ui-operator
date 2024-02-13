@@ -101,6 +101,13 @@ async def test_has_ingress(ops_test: OpsTest):
 
 
 async def test_oathkeeper_relation(ops_test: OpsTest):
+    await ops_test.model.deploy(
+        entity_url=OATHKEEPER,
+        channel="latest/edge",
+        series="jammy",
+        trust=True,
+    )
+
     await ops_test.model.add_relation(f"{APP_NAME}:oathkeeper-info", OATHKEEPER)
 
     await ops_test.model.wait_for_idle(

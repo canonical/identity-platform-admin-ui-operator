@@ -6,7 +6,7 @@
 import json
 import logging
 from typing import Tuple
-from unittest.mock import MagicMock, Mock
+from unittest.mock import MagicMock
 
 import pytest
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
@@ -290,14 +290,6 @@ class TestOathkeeperRelation:
         assert pebble_env["OATHKEEPER_PUBLIC_URL"] == "http://oathkeeper-url:80/testing-oathkeeper"
         assert pebble_env["RULES_CONFIGMAP_NAME"] == "access-rules"
         assert pebble_env["RULES_CONFIGMAP_NAMESPACE"] == "testing"
-
-    def test_oathkeeper_access_rules_file_info_updated(self, harness: Harness) -> None:
-        harness.charm.oathkeeper_info.update_requirer_info_relation_data = mocked_handle = Mock(
-            return_value=None
-        )
-        setup_oathkeeper_relation(harness)
-
-        mocked_handle.assert_called_with(access_rules_file="admin_ui_rules.json")
 
 
 class TestIngressRelation:

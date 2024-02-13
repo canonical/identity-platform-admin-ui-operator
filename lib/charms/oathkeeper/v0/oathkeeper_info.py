@@ -37,7 +37,7 @@ Class SomeCharm(CharmBase):
 import logging
 from typing import Dict, Optional
 
-from ops.charm import CharmBase, RelationChangedEvent
+from ops.charm import CharmBase, RelationCreatedEvent
 from ops.framework import EventBase, EventSource, Object, ObjectEvents
 
 # The unique Charmhub library identifier, never change it
@@ -55,14 +55,14 @@ INTERFACE_NAME = "oathkeeper_info"
 logger = logging.getLogger(__name__)
 
 
-class OathkeeperInfoRelationChangedEvent(EventBase):
-    """Event to notify the charm that the relation data has changed."""
+class OathkeeperInfoRelationCreatedEvent(EventBase):
+    """Event to notify the charm that the relation is ready."""
 
 
 class OathkeeperInfoProviderEvents(ObjectEvents):
     """Event descriptor for events raised by `OathkeeperInfoProvider`."""
 
-    data_changed = EventSource(OathkeeperInfoRelationChangedEvent)
+    ready = EventSource(OathkeeperInfoRelationCreatedEvent)
 
 
 class OathkeeperInfoProvider(Object):
@@ -77,10 +77,10 @@ class OathkeeperInfoProvider(Object):
         self._relation_name = relation_name
 
         events = self._charm.on[relation_name]
-        self.framework.observe(events.relation_changed, self._on_info_provider_relation_changed)
+        self.framework.observe(events.relation_created, self._on_info_provider_relation_created)
 
-    def _on_info_provider_relation_changed(self, event: RelationChangedEvent) -> None:
-        self.on.data_changed.emit()
+    def _on_info_provider_relation_created(self, event: RelationCreatedEvent) -> None:
+        self.on.ready.emit()
 
     def send_info_relation_data(
         self,
@@ -101,23 +101,6 @@ class OathkeeperInfoProvider(Object):
 
         for relation in relations:
             relation.data[self._charm.app].update(info_databag)
-
-    def get_requirer_info(self) -> Optional[str]:
-        """Get the requirer info."""
-        info = self.model.relations[self._relation_name]
-        if len(info) == 0:
-            return None
-
-        if not (app := info[0].app):
-            return None
-
-        data = info[0].data[app]
-
-        if not data:
-            logger.info("No relation data available.")
-            return None
-
-        return data.get("access_rules_file")
 
 
 class OathkeeperInfoRelationError(Exception):
@@ -149,22 +132,6 @@ class OathkeeperInfoRequirer(Object):
         super().__init__(charm, relation_name)
         self._charm = charm
         self._relation_name = relation_name
-
-    def update_requirer_info_relation_data(
-        self,
-        access_rules_file: str,
-    ) -> None:
-        """Updates relation with access rules info."""
-        if not self._charm.unit.is_leader():
-            return
-
-        relations = self.model.relations[self._relation_name]
-        info_databag = {
-            "access_rules_file": access_rules_file,
-        }
-
-        for relation in relations:
-            relation.data[self._charm.app].update(info_databag)
 
     def is_ready(self) -> bool:
         """Checks whether the relation data is ready.

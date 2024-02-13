@@ -18,6 +18,7 @@ TRAEFIK = "traefik-k8s"
 DB_APP = "postgresql-k8s"
 HYDRA = "hydra"
 KRATOS = "kratos"
+OATHKEEPER = "oathkeeper"
 
 
 async def get_unit_address(ops_test: OpsTest, app_name: str, unit_num: int) -> str:
@@ -97,3 +98,14 @@ async def test_has_ingress(ops_test: OpsTest):
     resp = requests.get(f"http://{public_address}/{ops_test.model.name}-{APP_NAME}/api/v0/status")
 
     assert resp.status_code == 200
+
+
+async def test_oathkeeper_relation(ops_test: OpsTest):
+    await ops_test.model.add_relation(f"{APP_NAME}:oathkeeper-info", OATHKEEPER)
+
+    await ops_test.model.wait_for_idle(
+        apps=[APP_NAME, OATHKEEPER],
+        status="active",
+        raise_on_blocked=True,
+        timeout=1000,
+    )

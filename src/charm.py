@@ -155,9 +155,6 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             logger.info("This app no longer has ingress")
 
     def _on_oathkeeper_relation_changed(self, event: RelationEvent) -> None:
-        self.oathkeeper_info.update_requirer_info_relation_data(
-            access_rules_file=RULES_CONFIGMAP_FILE_NAME
-        )
         self._handle_status_update_config(event)
 
     def _handle_status_update_config(self, event: HookEvent) -> None:

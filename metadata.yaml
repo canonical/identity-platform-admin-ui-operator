@@ -27,8 +27,11 @@ requires:
   hydra-endpoint-info:
     interface: hydra_endpoints
     limit: 1
-  kratos-endpoint-info:
-    interface: kratos_endpoints
+  kratos-info:
+    interface: kratos_info
+    limit: 1
+  oathkeeper-info:
+    interface: oathkeeper_info
     limit: 1
   ingress:
     interface: ingress

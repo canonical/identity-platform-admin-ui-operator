@@ -43,7 +43,7 @@ def setup_hydra_relation(harness: Harness) -> int:
 
 
 def setup_kratos_relation(harness: Harness) -> int:
-    relation_id = harness.add_relation("kratos-endpoint-info", "kratos")
+    relation_id = harness.add_relation("kratos-info", "kratos")
     harness.add_relation_unit(relation_id, "kratos/0")
     harness.update_relation_data(
         relation_id,
@@ -51,6 +51,24 @@ def setup_kratos_relation(harness: Harness) -> int:
         {
             "admin_endpoint": "http://kratos-admin-url:80/testing-kratos",
             "public_endpoint": "http://kratos-public-url:80/testing-kratos",
+            "providers_configmap_name": "providers",
+            "schemas_configmap_name": "identity-schemas",
+            "configmaps_namespace": "testing",
+        },
+    )
+    return relation_id
+
+
+def setup_oathkeeper_relation(harness: Harness) -> int:
+    relation_id = harness.add_relation("oathkeeper-info", "oathkeeper")
+    harness.add_relation_unit(relation_id, "oathkeeper/0")
+    harness.update_relation_data(
+        relation_id,
+        "oathkeeper",
+        {
+            "public_endpoint": "http://oathkeeper-url:80/testing-oathkeeper",
+            "rules_configmap_name": "access-rules",
+            "configmaps_namespace": "testing",
         },
     )
     return relation_id
@@ -88,6 +106,8 @@ def setup_loki_relation(harness: Harness) -> int:
         "loki-k8s",
         databag,
     )
+
+    return relation_id
 
 
 def setup_tempo_relation(harness: Harness) -> int:
@@ -129,10 +149,9 @@ class TestPebbleReadyEvent:
         )
         assert service.is_running()
 
-    def test_expected_layer(
-        self, harness: Harness, mocked_hydra_url: MagicMock, mocked_kratos_url: MagicMock
-    ) -> None:
+    def test_expected_layer(self, harness: Harness, mocked_hydra_url: MagicMock) -> None:
         harness.set_can_connect(WORKLOAD_CONTAINER_NAME, True)
+        setup_kratos_relation(harness)
         harness.charm.on.admin_ui_pebble_ready.emit(WORKLOAD_CONTAINER_NAME)
 
         expected_layer = {
@@ -145,16 +164,16 @@ class TestPebbleReadyEvent:
                     "command": "/usr/bin/identity-platform-admin-ui serve",
                     "startup": "enabled",
                     "environment": {
-                        "KRATOS_PUBLIC_URL": "http://kratos-url.com",
-                        "KRATOS_ADMIN_URL": "http://kratos-url.com",
+                        "KRATOS_PUBLIC_URL": "http://kratos-public-url:80/testing-kratos",
+                        "KRATOS_ADMIN_URL": "http://kratos-admin-url:80/testing-kratos",
                         "HYDRA_ADMIN_URL": "http://hydra-url.com",
                         "IDP_CONFIGMAP_NAME": "providers",
                         "IDP_CONFIGMAP_NAMESPACE": "testing",
                         "SCHEMAS_CONFIGMAP_NAME": "identity-schemas",
                         "SCHEMAS_CONFIGMAP_NAMESPACE": "testing",
                         "OATHKEEPER_PUBLIC_URL": "",
-                        "RULES_CONFIGMAP_NAME": "access-rules",
-                        "RULES_CONFIGMAP_NAMESPACE": "testing",
+                        "RULES_CONFIGMAP_NAME": "",
+                        "RULES_CONFIGMAP_NAMESPACE": "",
                         "RULES_CONFIGMAP_FILE_NAME": "admin_ui_rules.json",
                         "PORT": "8080",
                         "TRACING_ENABLED": False,
@@ -220,7 +239,7 @@ class TestKratosRelation:
 
         assert harness.model.unit.status == BlockedStatus("Missing required relation with kratos")
 
-    def test_layer_updated_with_kratos_endpoint_info(self, harness: Harness) -> None:
+    def test_layer_updated_with_kratos_info(self, harness: Harness) -> None:
         harness.set_can_connect(WORKLOAD_CONTAINER_NAME, True)
         harness.charm.on.admin_ui_pebble_ready.emit(WORKLOAD_CONTAINER_NAME)
         setup_kratos_relation(harness)
@@ -231,6 +250,10 @@ class TestKratosRelation:
 
         assert pebble_env["KRATOS_ADMIN_URL"] == "http://kratos-admin-url:80/testing-kratos"
         assert pebble_env["KRATOS_PUBLIC_URL"] == "http://kratos-public-url:80/testing-kratos"
+        assert pebble_env["IDP_CONFIGMAP_NAME"] == "providers"
+        assert pebble_env["IDP_CONFIGMAP_NAMESPACE"] == "testing"
+        assert pebble_env["SCHEMAS_CONFIGMAP_NAME"] == "identity-schemas"
+        assert pebble_env["SCHEMAS_CONFIGMAP_NAMESPACE"] == "testing"
 
 
 class TestHydraRelation:
@@ -252,6 +275,21 @@ class TestHydraRelation:
         ]["environment"]
 
         assert pebble_env["HYDRA_ADMIN_URL"] == "http://hydra-admin-url:80/testing-hydra"
+
+
+class TestOathkeeperRelation:
+    def test_layer_updated_with_oathkeeper_info(self, harness: Harness) -> None:
+        harness.set_can_connect(WORKLOAD_CONTAINER_NAME, True)
+        harness.charm.on.admin_ui_pebble_ready.emit(WORKLOAD_CONTAINER_NAME)
+        setup_oathkeeper_relation(harness)
+
+        pebble_env = harness.charm._admin_ui_pebble_layer.to_dict()["services"][
+            WORKLOAD_SERVICE_NAME
+        ]["environment"]
+
+        assert pebble_env["OATHKEEPER_PUBLIC_URL"] == "http://oathkeeper-url:80/testing-oathkeeper"
+        assert pebble_env["RULES_CONFIGMAP_NAME"] == "access-rules"
+        assert pebble_env["RULES_CONFIGMAP_NAMESPACE"] == "testing"
 
 
 class TestIngressRelation:

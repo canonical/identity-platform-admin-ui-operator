@@ -18,6 +18,7 @@ TRAEFIK = "traefik-k8s"
 DB_APP = "postgresql-k8s"
 HYDRA = "hydra"
 KRATOS = "kratos"
+OATHKEEPER = "oathkeeper"
 
 
 async def get_unit_address(ops_test: OpsTest, app_name: str, unit_num: int) -> str:
@@ -68,7 +69,7 @@ async def test_build_and_deploy(ops_test: OpsTest):
     await ops_test.model.integrate(KRATOS, DB_APP)
 
     await ops_test.model.integrate(f"{APP_NAME}:hydra-endpoint-info", HYDRA)
-    await ops_test.model.integrate(f"{APP_NAME}:kratos-endpoint-info", KRATOS)
+    await ops_test.model.integrate(f"{APP_NAME}:kratos-info", KRATOS)
 
     await ops_test.model.wait_for_idle(
         apps=[APP_NAME, DB_APP, HYDRA, KRATOS],
@@ -97,3 +98,21 @@ async def test_has_ingress(ops_test: OpsTest):
     resp = requests.get(f"http://{public_address}/{ops_test.model.name}-{APP_NAME}/api/v0/status")
 
     assert resp.status_code == 200
+
+
+async def test_oathkeeper_relation(ops_test: OpsTest):
+    await ops_test.model.deploy(
+        entity_url=OATHKEEPER,
+        channel="latest/edge",
+        series="jammy",
+        trust=True,
+    )
+
+    await ops_test.model.add_relation(f"{APP_NAME}:oathkeeper-info", OATHKEEPER)
+
+    await ops_test.model.wait_for_idle(
+        apps=[APP_NAME, OATHKEEPER],
+        status="active",
+        raise_on_blocked=True,
+        timeout=1000,
+    )

@@ -7,7 +7,7 @@
 """A Juju Kubernetes charmed operator for Identity Platform Admin UI."""
 import logging
 import re
-from typing import Optional
+from typing import Dict, Optional
 
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.hydra.v0.hydra_endpoints import (
@@ -28,7 +28,7 @@ from charms.traefik_k8s.v2.ingress import (
     IngressPerAppRequirer,
     IngressPerAppRevokedEvent,
 )
-from ops.charm import CharmBase, ConfigChangedEvent, HookEvent, RelationEvent, WorkloadEvent
+from ops.charm import CharmBase, ConfigChangedEvent, HookEvent, WorkloadEvent
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from ops.pebble import ChangeError, ExecError, Layer
@@ -126,7 +126,7 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
 
         self.framework.observe(
             self.on[OATHKEEPER_INFO_INTEGRATION_NAME].relation_changed,
-            self._on_oathkeeper_relation_changed,
+            self._on_config_changed,
         )
 
         self.framework.observe(
@@ -153,9 +153,6 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
     def _on_ingress_revoked(self, event: IngressPerAppRevokedEvent) -> None:
         if self.unit.is_leader():
             logger.info("This app no longer has ingress")
-
-    def _on_oathkeeper_relation_changed(self, event: RelationEvent) -> None:
-        self._handle_status_update_config(event)
 
     def _handle_status_update_config(self, event: HookEvent) -> None:
         if not self._container.can_connect():
@@ -205,25 +202,23 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
                 logger.info("No hydra-endpoint-info relation data found")
         return hydra_url
 
-    def _get_kratos_info(self, key: str) -> str:
-        kratos_key = ""
+    def _get_kratos_info(self) -> Dict:
+        kratos_info = {}
         if self.kratos_info.is_ready():
             try:
                 kratos_info = self.kratos_info.get_kratos_info()
-                kratos_key = kratos_info[key]
             except KratosInfoRelationDataMissingError:
                 logger.info("No kratos-info relation data found")
-        return kratos_key
+        return kratos_info
 
-    def _get_oathkeeper_info(self, key: str) -> str:
-        oathkeeper_key = ""
+    def _get_oathkeeper_info(self) -> Dict:
+        oathkeeper_info = {}
         if self.oathkeeper_info.is_ready():
             try:
                 oathkeeper_info = self.oathkeeper_info.get_oathkeeper_info()
-                oathkeeper_key = oathkeeper_info[key]
             except OathkeeperInfoRelationDataMissingError:
                 logger.info("No oathkeeper-info relation data found")
-        return oathkeeper_key
+        return oathkeeper_info
 
     def _promtail_error(self, event: PromtailDigestError) -> None:
         logger.error(event.message)
@@ -250,17 +245,20 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
     @property
     def _admin_ui_pebble_layer(self) -> Layer:
         """Define pebble layer."""
+        kratos_info = self._get_kratos_info()
+        oathkeeper_info = self._get_oathkeeper_info()
+
         container_env = {
-            "KRATOS_ADMIN_URL": self._get_kratos_info("admin_endpoint"),
-            "KRATOS_PUBLIC_URL": self._get_kratos_info("public_endpoint"),
+            "KRATOS_ADMIN_URL": kratos_info.get("admin_endpoint", ""),
+            "KRATOS_PUBLIC_URL": kratos_info.get("public_endpoint", ""),
             "HYDRA_ADMIN_URL": self._get_hydra_endpoint_info(),
-            "IDP_CONFIGMAP_NAME": self._get_kratos_info("providers_configmap_name"),
-            "IDP_CONFIGMAP_NAMESPACE": self._get_kratos_info("configmaps_namespace"),
-            "SCHEMAS_CONFIGMAP_NAME": self._get_kratos_info("schemas_configmap_name"),
-            "SCHEMAS_CONFIGMAP_NAMESPACE": self._get_kratos_info("configmaps_namespace"),
-            "OATHKEEPER_PUBLIC_URL": self._get_oathkeeper_info("public_endpoint"),
-            "RULES_CONFIGMAP_NAME": self._get_oathkeeper_info("rules_configmap_name"),
-            "RULES_CONFIGMAP_NAMESPACE": self._get_oathkeeper_info("configmaps_namespace"),
+            "IDP_CONFIGMAP_NAME": kratos_info.get("providers_configmap_name", ""),
+            "IDP_CONFIGMAP_NAMESPACE": kratos_info.get("configmaps_namespace", ""),
+            "SCHEMAS_CONFIGMAP_NAME": kratos_info.get("schemas_configmap_name", ""),
+            "SCHEMAS_CONFIGMAP_NAMESPACE": kratos_info.get("configmaps_namespace", ""),
+            "OATHKEEPER_PUBLIC_URL": oathkeeper_info.get("public_endpoint", ""),
+            "RULES_CONFIGMAP_NAME": oathkeeper_info.get("rules_configmap_name", ""),
+            "RULES_CONFIGMAP_NAMESPACE": oathkeeper_info.get("configmaps_namespace", ""),
             "RULES_CONFIGMAP_FILE_NAME": RULES_CONFIGMAP_FILE_NAME,
             "PORT": str(ADMIN_UI_PORT),
             "TRACING_ENABLED": False,

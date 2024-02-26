@@ -1,14 +1,16 @@
 # Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-from typing import Generator
+from typing import Dict, Generator
 from unittest.mock import MagicMock
 
 import pytest
+from charms.openfga_k8s.v1.openfga import OpenfgaProviderAppData
 from ops.testing import Harness
 from pytest_mock import MockerFixture
 
 from charm import IdentityPlatformAdminUIOperatorCharm
+from constants import OPENFGA_STORE_NAME
 
 
 @pytest.fixture()
@@ -25,6 +27,24 @@ def harness() -> Generator[Harness, None, None]:
 def mocked_get_version(harness: Harness):
     harness.handle_exec(
         "admin-ui", ["identity-platform-admin-ui", "version"], result="App Version: 1.2.0"
+    )
+
+
+@pytest.fixture(autouse=True)
+def mocked_create_model(harness: Harness) -> None:
+    harness.handle_exec(
+        "admin-ui",
+        [
+            "identity-platform-admin-ui",
+            "create-fga-model",
+            "--fga-api-url",
+            "http://127.0.0.1:8080",
+            "--fga-api-token",
+            "token",
+            "--fga-store-id",
+            "store_id",
+        ],
+        result="Created model: 01HQJMD174NPN2A4JFRFZ1NNW1",
     )
 
 
@@ -53,4 +73,38 @@ def mocked_hydra_url(mocker: MockerFixture) -> MagicMock:
 def mocked_log_level(mocker: MockerFixture) -> MagicMock:
     return mocker.patch(
         "charm.IdentityPlatformAdminUIOperatorCharm._log_level", return_value="warning"
+    )
+
+
+@pytest.fixture()
+def mocked_handle_status_update_config(mocker: MockerFixture) -> MagicMock:
+    return mocker.patch(
+        "charm.IdentityPlatformAdminUIOperatorCharm._handle_status_update_config",
+    )
+
+
+@pytest.fixture()
+def openfga_requirer_databag() -> Dict:
+    return {"store_name": OPENFGA_STORE_NAME}
+
+
+@pytest.fixture()
+def mocked_openfga_store_info(mocker: MockerFixture) -> MagicMock:
+    return mocker.patch(
+        "charms.openfga_k8s.v1.openfga.OpenFGARequires.get_store_info",
+        return_value=OpenfgaProviderAppData(
+            store_id="store_id",
+            token="token",
+            token_secret_id="token_secret_id",
+            grpc_api_url="http://127.0.0.1:8081",
+            http_api_url="http://127.0.0.1:8080",
+        ),
+    )
+
+
+@pytest.fixture()
+def mocked_openfga_model_id(mocker: MockerFixture) -> MagicMock:
+    return mocker.patch(
+        "charm.IdentityPlatformAdminUIOperatorCharm._openfga_model_id",
+        return_value="01HQJMD174NPN2A4JFRFZ1NNW1",
     )

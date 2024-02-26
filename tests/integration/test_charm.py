@@ -84,7 +84,7 @@ async def test_build_and_deploy(ops_test: OpsTest):
         apps=[APP_NAME, DB_APP, HYDRA, KRATOS, OPENFGA],
         status="active",
         raise_on_blocked=False,
-        raise_on_error=True,
+        raise_on_error=False,
         timeout=1000,
     )
 

@@ -41,6 +41,9 @@ requires:
   tracing:
     interface: tracing
     limit: 1
+  openfga:
+    interface: openfga
+    limit: 1
 
 provides:
   metrics-endpoint:
@@ -51,3 +54,7 @@ provides:
     description: |
       Forwards dashboards to Grafana deployment 
     interface: grafana_dashboard
+
+peers:
+  identity-platform-admin-ui:
+    interface: identity_platform_admin_ui_peers

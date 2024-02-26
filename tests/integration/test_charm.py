@@ -19,6 +19,7 @@ DB_APP = "postgresql-k8s"
 HYDRA = "hydra"
 KRATOS = "kratos"
 OATHKEEPER = "oathkeeper"
+OPENFGA = "openfga-k8s"
 
 
 async def get_unit_address(ops_test: OpsTest, app_name: str, unit_num: int) -> str:
@@ -52,6 +53,12 @@ async def test_build_and_deploy(ops_test: OpsTest):
         config={"external_hostname": "some_hostname"},
     )
     await ops_test.model.deploy(
+        entity_url=OPENFGA,
+        channel="latest/edge",
+        series="jammy",
+        trust=True,
+    )
+    await ops_test.model.deploy(
         entity_url=KRATOS,
         channel="latest/edge",
         series="jammy",
@@ -64,15 +71,17 @@ async def test_build_and_deploy(ops_test: OpsTest):
         trust=True,
     )
 
+    await ops_test.model.integrate(OPENFGA, DB_APP)
     await ops_test.model.integrate(HYDRA, DB_APP)
     await ops_test.model.integrate(f"{HYDRA}:public-ingress", TRAEFIK)
     await ops_test.model.integrate(KRATOS, DB_APP)
 
     await ops_test.model.integrate(f"{APP_NAME}:hydra-endpoint-info", HYDRA)
     await ops_test.model.integrate(f"{APP_NAME}:kratos-info", KRATOS)
+    await ops_test.model.integrate(APP_NAME, OPENFGA)
 
     await ops_test.model.wait_for_idle(
-        apps=[APP_NAME, DB_APP, HYDRA, KRATOS],
+        apps=[APP_NAME, DB_APP, HYDRA, KRATOS, OPENFGA],
         status="active",
         raise_on_blocked=False,
         raise_on_error=True,

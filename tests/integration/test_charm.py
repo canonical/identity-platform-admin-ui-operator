@@ -72,6 +72,8 @@ async def test_build_and_deploy(ops_test: OpsTest):
     )
 
     await ops_test.model.integrate(OPENFGA, DB_APP)
+    await ops_test.model.wait_for_idle([OPENFGA, DB_APP], status="active", timeout=1000)
+    
     await ops_test.model.integrate(HYDRA, DB_APP)
     await ops_test.model.integrate(f"{HYDRA}:public-ingress", TRAEFIK)
     await ops_test.model.integrate(KRATOS, DB_APP)

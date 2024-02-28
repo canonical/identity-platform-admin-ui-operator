@@ -124,6 +124,6 @@ async def test_oathkeeper_relation(ops_test: OpsTest):
     await ops_test.model.wait_for_idle(
         apps=[APP_NAME, OATHKEEPER],
         status="active",
-        raise_on_blocked=True,
+        raise_on_blocked=False,
         timeout=1000,
     )

@@ -363,6 +363,14 @@ class TestIngressRelation:
 
 
 class TestOpenFGARelation:
+    def test_cannot_connect_on_openfga_store_created(self, harness: Harness) -> None:
+        harness.set_can_connect(WORKLOAD_CONTAINER_NAME, False)
+        harness.charm.openfga.on.openfga_store_created.emit(store_id="store-id")
+
+        assert harness.charm.unit.status == WaitingStatus(
+            "Waiting to connect to admin-ui container"
+        )
+
     def test_missing_required_openfga_relation(self, harness: Harness) -> None:
         harness.set_can_connect(WORKLOAD_CONTAINER_NAME, True)
         setup_peer_relation(harness)
@@ -414,6 +422,16 @@ class TestOpenFGARelation:
         ]["environment"]
 
         assert pebble_env["AUTHORIZATION_ENABLED"] is False
+
+
+class TestUpgradeEvent:
+    def test_cannot_connect_on_upgrade_charm(self, harness: Harness) -> None:
+        harness.set_can_connect(WORKLOAD_CONTAINER_NAME, False)
+        harness.charm.on.upgrade_charm.emit()
+
+        assert harness.charm.unit.status == WaitingStatus(
+            "Waiting to connect to admin-ui container"
+        )
 
     def test_upgrade_charm_event(
         self,

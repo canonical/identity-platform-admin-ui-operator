@@ -7,8 +7,8 @@
 """A Juju Kubernetes charmed operator for Identity Platform Admin UI."""
 import json
 import logging
-import re
 from typing import Dict, Optional
+from urllib.parse import urlparse
 
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.hydra.v0.hydra_endpoints import (
@@ -38,8 +38,9 @@ from charms.traefik_k8s.v2.ingress import (
 from ops.charm import CharmBase, ConfigChangedEvent, HookEvent, UpgradeCharmEvent, WorkloadEvent
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, Relation, WaitingStatus
-from ops.pebble import ChangeError, ExecError, Layer
+from ops.pebble import ChangeError, Error, ExecError, Layer
 
+from admin_ui_cli import AdminUICLI
 from constants import (
     ADMIN_UI_COMMAND,
     ADMIN_UI_PORT,
@@ -88,6 +89,8 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         )
 
         self.openfga = OpenFGARequires(self, OPENFGA_STORE_NAME)
+
+        self._admin_ui_cli = AdminUICLI(self._container)
 
         self.tracing = TracingEndpointRequirer(
             self,
@@ -179,20 +182,25 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
 
     def _on_openfga_store_created(self, event: OpenFGAStoreCreateEvent) -> None:
         """Handle openfga store created event."""
+        if not self._container.can_connect():
+            event.defer()
+            logger.info("Cannot connect to admin-ui container. Deferring the event.")
+            self.unit.status = WaitingStatus("Waiting to connect to admin-ui container")
+            return
+
         if not self._peers:
             self.unit.status = WaitingStatus("Waiting for peer relation")
             event.defer()
             return
 
-        if self._get_openfga_store_info():
-            model_id = self._create_openfga_model()
-            self._set_peer_data(key=self._get_version(), data=dict(openfga_model_id=model_id))
-
-            self._handle_status_update_config(event)
-        else:
+        openfga_info = self._get_openfga_store_info()
+        if not openfga_info:
             logger.debug("No openfga store info found, deferring the event")
             event.defer()
             return
+
+        self._create_openfga_model(openfga_info)
+        self._handle_status_update_config(event)
 
     def _on_openfga_store_removed(self, event: OpenFGAStoreRemovedEvent) -> None:
         """Handle openfga store removed event."""
@@ -205,14 +213,19 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
 
         Create a new model to ensure the migration was run.
         """
+        if not self._container.can_connect():
+            event.defer()
+            logger.info("Cannot connect to admin-ui container. Deferring the event.")
+            self.unit.status = WaitingStatus("Waiting to connect to admin-ui container")
+            return
+
         if not self._peers:
             self.unit.status = WaitingStatus("Waiting for peer relation")
             event.defer()
             return
 
-        if self._get_openfga_store_info():
-            model_id = self._create_openfga_model()
-            self._set_peer_data(key=self._get_version(), data=dict(openfga_model_id=model_id))
+        if openfga_info := self._get_openfga_store_info():
+            self._create_openfga_model(openfga_info)
 
     def _get_openfga_store_info(self) -> Optional[OpenfgaProviderAppData]:
         openfga_info = self.openfga.get_store_info()
@@ -221,30 +234,6 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             return None
 
         return openfga_info
-
-    def _create_openfga_model(self) -> Optional[str]:
-        openfga_info = self._get_openfga_store_info()
-        cmd = [
-            "identity-platform-admin-ui",
-            "create-fga-model",
-            "--fga-api-url",
-            openfga_info.http_api_url,
-            "--fga-api-token",
-            openfga_info.token,
-            "--fga-store-id",
-            openfga_info.store_id,
-        ]
-        try:
-            process = self._container.exec(cmd)
-            stdout, _ = process.wait_output()
-        except ExecError as err:
-            logger.error(f"Exited with code {err.exit_code}. Stderr: {err.stderr}")
-            return
-
-        out_re = r"Created model:\s*(.+)\s*$"
-        model = re.search(out_re, stdout)
-        if model:
-            return model[1]
 
     def _handle_status_update_config(self, event: HookEvent) -> None:
         if not self._container.can_connect():
@@ -324,19 +313,34 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
     def _promtail_error(self, event: PromtailDigestError) -> None:
         logger.error(event.message)
 
-    def _get_version(self) -> Optional[str]:
-        cmd = ["identity-platform-admin-ui", "version"]
+    def _create_openfga_model(self, openfga_info: OpenfgaProviderAppData) -> None:
+        if not self.unit.is_leader():
+            logger.debug("Unit does not have leadership")
+            return
+
         try:
-            process = self._container.exec(cmd)
-            stdout, _ = process.wait_output()
+            model_id = self._admin_ui_cli.create_openfga_model(openfga_info)
+        except ExecError as err:
+            logger.error(f"Exited with code: {err.exit_code}. Stderr: {err.stderr}")
+            return
+        except Error as err:
+            logger.error(f"Something went wrong when trying to run the command: {err}")
+            return
+        except Exception as e:
+            logger.error(f"Failed to get the model id: {e}")
+            return
+
+        logger.info(f"Successfully created an openfga model: {model_id}")
+        self._set_peer_data(key=self._get_version(), data=dict(openfga_model_id=model_id))
+
+    def _get_version(self) -> Optional[str]:
+        try:
+            version = self._admin_ui_cli.get_version()
         except ExecError as err:
             logger.error(f"Exited with code {err.exit_code}. Stderr: {err.stderr}")
             return
 
-        out_re = r"App Version:\s*(.+)\s*$"
-        versions = re.search(out_re, stdout)
-        if versions:
-            return versions[1]
+        return version
 
     def _set_version(self) -> None:
         if version := self._get_version():
@@ -407,12 +411,14 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         if (openfga_info := self._get_openfga_store_info()) and (
             model_id := self._openfga_model_id
         ):
+            openfga_url = urlparse(openfga_info.http_api_url)
+
             container_env["AUTHORIZATION_ENABLED"] = True
             container_env["OPENFGA_AUTHORIZATION_MODEL_ID"] = model_id
             container_env["OPENFGA_STORE_ID"] = openfga_info.store_id
             container_env["OPENFGA_API_TOKEN"] = openfga_info.token
-            container_env["OPENFGA_API_SCHEME"] = "http"
-            container_env["OPENFGA_API_HOST"] = openfga_info.http_api_url.strip("http://")
+            container_env["OPENFGA_API_SCHEME"] = openfga_url.scheme
+            container_env["OPENFGA_API_HOST"] = openfga_url.netloc
 
         pebble_layer = {
             "summary": "Pebble Layer for Identity Platform Admin UI",

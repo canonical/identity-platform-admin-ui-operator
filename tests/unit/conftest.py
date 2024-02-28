@@ -30,24 +30,6 @@ def mocked_get_version(harness: Harness):
     )
 
 
-@pytest.fixture(autouse=True)
-def mocked_create_model(harness: Harness) -> None:
-    harness.handle_exec(
-        "admin-ui",
-        [
-            "identity-platform-admin-ui",
-            "create-fga-model",
-            "--fga-api-url",
-            "http://127.0.0.1:8080",
-            "--fga-api-token",
-            "token",
-            "--fga-store-id",
-            "store_id",
-        ],
-        result="Created model: 01HQJMD174NPN2A4JFRFZ1NNW1",
-    )
-
-
 @pytest.fixture()
 def mocked_version(mocker: MockerFixture) -> MagicMock:
     return mocker.patch("charm.IdentityPlatformAdminUIOperatorCharm._set_version")
@@ -108,3 +90,10 @@ def mocked_openfga_model_id(mocker: MockerFixture) -> MagicMock:
         "charm.IdentityPlatformAdminUIOperatorCharm._openfga_model_id",
         return_value="01HQJMD174NPN2A4JFRFZ1NNW1",
     )
+
+
+@pytest.fixture()
+def mocked_create_model(mocker: MockerFixture) -> Generator:
+    mock = mocker.patch("charm.AdminUICLI.create_openfga_model")
+    mock.return_value = "01HQJMD174NPN2A4JFRFZ1NNW1"
+    yield mock

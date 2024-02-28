@@ -10,6 +10,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
+from ops.pebble import ExecError
 from ops.testing import Harness
 
 from constants import LOG_DIR, WORKLOAD_CONTAINER_NAME, WORKLOAD_SERVICE_NAME
@@ -458,3 +459,55 @@ class TestUpgradeEvent:
             WORKLOAD_SERVICE_NAME
         ]["environment"]
         assert pebble_env["AUTHORIZATION_ENABLED"] is True
+
+
+class TestAdminUICLI:
+    def test_model_creation_exec_error(
+        self,
+        harness: Harness,
+        mocked_create_model: MagicMock,
+        caplog: pytest.LogCaptureFixture,
+        mocked_openfga_store_info: MagicMock,
+    ) -> None:
+        caplog.set_level(logging.ERROR)
+        harness.set_can_connect(WORKLOAD_CONTAINER_NAME, True)
+        setup_peer_relation(harness)
+        setup_openfga_relation(harness)
+
+        cmd = [
+            "identity-platform-admin-ui",
+            "create-fga-model",
+            "--fga-api-url",
+            "http://some-url",
+            "--fga-api-token",
+            "token",
+            "--fga-store-id",
+            "store-id",
+        ]
+        err = ExecError(command=cmd, exit_code=1, stdout="Out", stderr="Error")
+        mocked_create_model.side_effect = err
+
+        harness.charm.openfga.on.openfga_store_created.emit(store_id="store-id")
+
+        error_messages = [record[2] for record in caplog.record_tuples]
+        assert f"Exited with code: {err.exit_code}. Stderr: {err.stderr}" in error_messages
+
+    def test_model_creation_parse_exception(
+        self,
+        harness: Harness,
+        mocked_create_model: MagicMock,
+        caplog: pytest.LogCaptureFixture,
+        mocked_openfga_store_info: MagicMock,
+    ) -> None:
+        caplog.set_level(logging.ERROR)
+        harness.set_can_connect(WORKLOAD_CONTAINER_NAME, True)
+        setup_peer_relation(harness)
+        setup_openfga_relation(harness)
+
+        e = Exception("Failed to parse the command output")
+        mocked_create_model.side_effect = e
+
+        harness.charm.openfga.on.openfga_store_created.emit(store_id="store-id")
+
+        error_messages = [record[2] for record in caplog.record_tuples]
+        assert f"Failed to get the model id: {e}" in error_messages

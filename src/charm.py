@@ -229,7 +229,7 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
 
     def _get_openfga_store_info(self) -> Optional[OpenfgaProviderAppData]:
         openfga_info = self.openfga.get_store_info()
-        if not openfga_info:
+        if not openfga_info or not openfga_info.store_id:
             logger.info("No openfga store info available")
             return None
 

@@ -86,6 +86,8 @@ async def test_build_and_deploy(ops_test: OpsTest):
         apps=[APP_NAME, DB_APP, HYDRA, KRATOS, OPENFGA],
         status="active",
         raise_on_blocked=False,
+        # TODO: Switch to true
+        #  when https://github.com/canonical/openfga-operator/issues/25 is solved
         raise_on_error=False,
         timeout=1000,
     )

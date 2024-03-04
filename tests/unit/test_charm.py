@@ -13,6 +13,7 @@ from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from ops.pebble import ExecError
 from ops.testing import Harness
 
+from admin_ui_cli import CommandOutputParseExceptionError
 from constants import LOG_DIR, WORKLOAD_CONTAINER_NAME, WORKLOAD_SERVICE_NAME
 
 
@@ -504,7 +505,7 @@ class TestAdminUICLI:
         setup_peer_relation(harness)
         setup_openfga_relation(harness)
 
-        e = Exception("Failed to parse the command output")
+        e = CommandOutputParseExceptionError("Failed to parse the command output")
         mocked_create_model.side_effect = e
 
         harness.charm.openfga.on.openfga_store_created.emit(store_id="store-id")

@@ -14,6 +14,10 @@ from ops.model import Container
 logger = logging.getLogger(__name__)
 
 
+class CommandOutputParseExceptionError(Exception):
+    """Raised when the command output parsing fails."""
+
+
 class AdminUICLI:
     """Helper object for running Admin UI CLI commands."""
 
@@ -51,7 +55,7 @@ class AdminUICLI:
         if model:
             return model[1]
         else:
-            raise Exception("Failed to parse the command output")
+            raise CommandOutputParseExceptionError("Failed to parse the command output")
 
     def _run_cmd(
         self,

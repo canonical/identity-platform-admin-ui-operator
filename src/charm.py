@@ -205,7 +205,9 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
     def _on_openfga_store_removed(self, event: OpenFGAStoreRemovedEvent) -> None:
         """Handle openfga store removed event."""
         logger.info("OpenFGA store was removed")
-        self._pop_peer_data(key=self._get_version())
+        if self.unit.is_leader():
+            self._pop_peer_data(key=self._get_version())
+
         self._handle_status_update_config(event)
 
     def _on_upgrade_charm(self, event: UpgradeCharmEvent) -> None:

@@ -142,7 +142,7 @@ async def test_scale_up(ops_test: OpsTest) -> None:
         status="active",
         raise_on_blocked=False,
         timeout=1000,
-        wait_for_active=True,
+        wait_for_exact_units=2,
     )
 
 
@@ -157,5 +157,4 @@ async def test_scale_down(ops_test: OpsTest) -> None:
         status="active",
         raise_on_blocked=False,
         timeout=1000,
-        wait_for_active=True,
     )

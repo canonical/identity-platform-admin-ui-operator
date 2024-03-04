@@ -35,7 +35,14 @@ from charms.traefik_k8s.v2.ingress import (
     IngressPerAppRequirer,
     IngressPerAppRevokedEvent,
 )
-from ops.charm import CharmBase, ConfigChangedEvent, HookEvent, UpgradeCharmEvent, WorkloadEvent
+from ops.charm import (
+    CharmBase,
+    ConfigChangedEvent,
+    HookEvent,
+    RelationChangedEvent,
+    UpgradeCharmEvent,
+    WorkloadEvent,
+)
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, Relation, WaitingStatus
 from ops.pebble import ChangeError, Error, ExecError, Layer
@@ -126,6 +133,9 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         self.framework.observe(self.on.admin_ui_pebble_ready, self._on_admin_ui_pebble_ready)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.upgrade_charm, self._on_upgrade_charm)
+        self.framework.observe(
+            self.on.identity_platform_admin_ui_relation_changed, self._on_peer_relation_changed
+        )
 
         self.framework.observe(self.ingress.on.ready, self._on_ingress_ready)
         self.framework.observe(self.ingress.on.revoked, self._on_ingress_revoked)
@@ -170,6 +180,9 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
 
     def _on_config_changed(self, event: ConfigChangedEvent) -> None:
         """Handle changed configuration."""
+        self._handle_status_update_config(event)
+
+    def _on_peer_relation_changed(self, event: RelationChangedEvent) -> None:
         self._handle_status_update_config(event)
 
     def _on_ingress_ready(self, event: IngressPerAppReadyEvent) -> None:

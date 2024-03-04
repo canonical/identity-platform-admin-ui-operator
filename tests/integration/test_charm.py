@@ -129,3 +129,33 @@ async def test_oathkeeper_relation(ops_test: OpsTest):
         raise_on_blocked=False,
         timeout=1000,
     )
+
+
+async def test_scale_up(ops_test: OpsTest) -> None:
+    """Check that Admin UI works after it is scaled up."""
+    app = ops_test.model.applications[APP_NAME]
+
+    await app.scale(2)
+
+    await ops_test.model.wait_for_idle(
+        apps=[APP_NAME],
+        status="active",
+        raise_on_blocked=False,
+        timeout=1000,
+        wait_for_active=True,
+    )
+
+
+async def test_scale_down(ops_test: OpsTest) -> None:
+    """Check that Admin UI works after it is scaled down."""
+    app = ops_test.model.applications[APP_NAME]
+
+    await app.scale(1)
+
+    await ops_test.model.wait_for_idle(
+        apps=[APP_NAME],
+        status="active",
+        raise_on_blocked=False,
+        timeout=1000,
+        wait_for_active=True,
+    )

@@ -47,7 +47,7 @@ from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, Relation, WaitingStatus
 from ops.pebble import ChangeError, Error, ExecError, Layer
 
-from admin_ui_cli import AdminUICLI
+from admin_ui_cli import AdminUICLI, CommandOutputParseExceptionError
 from constants import (
     ADMIN_UI_COMMAND,
     ADMIN_UI_PORT,
@@ -175,6 +175,12 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         self.unit.open_port(protocol="tcp", port=ADMIN_UI_PORT)
 
         self._handle_status_update_config(event)
+
+        if not self._container.can_connect():
+            event.defer()
+            logger.info("Cannot connect to admin-ui container. Deferring the event.")
+            self.unit.status = WaitingStatus("Waiting to connect to admin-ui container")
+            return
 
         self._set_version()
 
@@ -341,7 +347,7 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         except Error as err:
             logger.error(f"Something went wrong when trying to run the command: {err}")
             return
-        except Exception as e:
+        except CommandOutputParseExceptionError as e:
             logger.error(f"Failed to get the model id: {e}")
             return
 
@@ -353,6 +359,9 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             version = self._admin_ui_cli.get_version()
         except ExecError as err:
             logger.error(f"Exited with code {err.exit_code}. Stderr: {err.stderr}")
+            return
+        except Error as err:
+            logger.error(f"Something went wrong when trying to run the command: {err}")
             return
 
         return version

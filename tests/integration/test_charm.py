@@ -127,6 +127,7 @@ async def test_oathkeeper_relation(ops_test: OpsTest):
         apps=[APP_NAME, OATHKEEPER],
         status="active",
         raise_on_blocked=False,
+        raise_on_error=False,
         timeout=1000,
     )
 

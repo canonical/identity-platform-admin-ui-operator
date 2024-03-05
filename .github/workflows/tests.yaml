@@ -32,10 +32,9 @@ jobs:
           provider: microk8s
           channel: 1.28-strict/stable
           juju-channel: 3.1
-          bootstrap-options: '--agent-version=3.1.0'
 
       - name: Run integration tests
-        # set a predictable model name so it can be consumed by charm-logdump-action
+        # set a predictable model name
         run: tox -e integration -- --model testing
 
       - name: Get contexts
@@ -47,7 +46,7 @@ jobs:
         if: failure()
 
       - name: Get juju logs
-        run: juju debug-log --replay --include identity-platform-admin-ui-0
+        run: juju debug-log --replay --include identity-platform-admin-ui
         if: failure()
 
       - name: Get identity-platform-admin-ui-operator container logs

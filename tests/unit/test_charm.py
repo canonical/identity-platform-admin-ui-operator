@@ -171,7 +171,12 @@ class TestPebbleReadyEvent:
 
         assert harness.charm.unit.status == WaitingStatus("Waiting for peer relation")
 
-    def test_can_connect_on_pebble_ready(self, harness: Harness) -> None:
+    def test_can_connect_on_pebble_ready(
+        self,
+        harness: Harness,
+        mocked_openfga_store_info: MagicMock,
+        mocked_openfga_model_id: MagicMock,
+    ) -> None:
         harness.set_can_connect(WORKLOAD_CONTAINER_NAME, True)
         setup_peer_relation(harness)
         setup_openfga_relation(harness)
@@ -186,7 +191,13 @@ class TestPebbleReadyEvent:
         )
         assert service.is_running()
 
-    def test_expected_layer(self, harness: Harness, mocked_hydra_url: MagicMock) -> None:
+    def test_expected_layer(
+        self,
+        harness: Harness,
+        mocked_hydra_url: MagicMock,
+        mocked_openfga_store_info: MagicMock,
+        mocked_openfga_model_id: MagicMock,
+    ) -> None:
         harness.set_can_connect(WORKLOAD_CONTAINER_NAME, True)
         setup_kratos_relation(harness)
         harness.charm.on.admin_ui_pebble_ready.emit(WORKLOAD_CONTAINER_NAME)
@@ -201,7 +212,12 @@ class TestPebbleReadyEvent:
                     "command": "/usr/bin/identity-platform-admin-ui serve",
                     "startup": "enabled",
                     "environment": {
-                        "AUTHORIZATION_ENABLED": False,
+                        "AUTHORIZATION_ENABLED": True,
+                        "OPENFGA_API_HOST": "127.0.0.1:8080",
+                        "OPENFGA_API_SCHEME": "http",
+                        "OPENFGA_API_TOKEN": "token",
+                        "OPENFGA_STORE_ID": "store_id",
+                        "OPENFGA_AUTHORIZATION_MODEL_ID": "01HQJMD174NPN2A4JFRFZ1NNW1",
                         "KRATOS_PUBLIC_URL": "http://kratos-public-url:80/testing-kratos",
                         "KRATOS_ADMIN_URL": "http://kratos-admin-url:80/testing-kratos",
                         "HYDRA_ADMIN_URL": "http://hydra-url.com",
@@ -251,7 +267,12 @@ class TestPebbleReadyEvent:
 
 
 class TestTracingRelation:
-    def test_layer_updated_with_tracing_endpoint_info(self, harness: Harness) -> None:
+    def test_layer_updated_with_tracing_endpoint_info(
+        self,
+        harness: Harness,
+        mocked_openfga_store_info: MagicMock,
+        mocked_openfga_model_id: MagicMock,
+    ) -> None:
         harness.set_can_connect(WORKLOAD_CONTAINER_NAME, True)
         harness.charm.on.admin_ui_pebble_ready.emit(WORKLOAD_CONTAINER_NAME)
         setup_tempo_relation(harness)
@@ -280,7 +301,12 @@ class TestKratosRelation:
 
         assert harness.model.unit.status == BlockedStatus("Missing required relation with kratos")
 
-    def test_layer_updated_with_kratos_info(self, harness: Harness) -> None:
+    def test_layer_updated_with_kratos_info(
+        self,
+        harness: Harness,
+        mocked_openfga_store_info: MagicMock,
+        mocked_openfga_model_id: MagicMock,
+    ) -> None:
         harness.set_can_connect(WORKLOAD_CONTAINER_NAME, True)
         harness.charm.on.admin_ui_pebble_ready.emit(WORKLOAD_CONTAINER_NAME)
         setup_kratos_relation(harness)
@@ -307,7 +333,12 @@ class TestHydraRelation:
 
         assert harness.model.unit.status == BlockedStatus("Missing required relation with hydra")
 
-    def test_layer_updated_with_hydra_endpoint_info(self, harness: Harness) -> None:
+    def test_layer_updated_with_hydra_endpoint_info(
+        self,
+        harness: Harness,
+        mocked_openfga_store_info: MagicMock,
+        mocked_openfga_model_id: MagicMock,
+    ) -> None:
         harness.set_can_connect(WORKLOAD_CONTAINER_NAME, True)
         harness.charm.on.admin_ui_pebble_ready.emit(WORKLOAD_CONTAINER_NAME)
         setup_hydra_relation(harness)
@@ -320,7 +351,12 @@ class TestHydraRelation:
 
 
 class TestOathkeeperRelation:
-    def test_layer_updated_with_oathkeeper_info(self, harness: Harness) -> None:
+    def test_layer_updated_with_oathkeeper_info(
+        self,
+        harness: Harness,
+        mocked_openfga_store_info: MagicMock,
+        mocked_openfga_model_id: MagicMock,
+    ) -> None:
         harness.set_can_connect(WORKLOAD_CONTAINER_NAME, True)
         harness.charm.on.admin_ui_pebble_ready.emit(WORKLOAD_CONTAINER_NAME)
         setup_oathkeeper_relation(harness)
@@ -383,6 +419,17 @@ class TestOpenFGARelation:
 
         assert harness.model.unit.status == BlockedStatus("Missing required relation with openfga")
 
+    def test_missing_required_openfga_relation_data(self, harness: Harness) -> None:
+        harness.set_can_connect(WORKLOAD_CONTAINER_NAME, True)
+        setup_peer_relation(harness)
+        container = harness.model.unit.get_container(WORKLOAD_CONTAINER_NAME)
+        harness.charm.on.admin_ui_pebble_ready.emit(container)
+        setup_openfga_relation(harness)
+        setup_kratos_relation(harness)
+        setup_hydra_relation(harness)
+
+        assert harness.model.unit.status == WaitingStatus("Waiting for openfga store and model")
+
     def test_openfga_requirer_data_in_relation_databag(
         self, harness: Harness, openfga_requirer_databag: Dict
     ) -> None:
@@ -411,19 +458,22 @@ class TestOpenFGARelation:
         assert pebble_env["OPENFGA_API_TOKEN"] == "token"
         assert pebble_env["OPENFGA_API_SCHEME"] == "http"
         assert pebble_env["OPENFGA_API_HOST"] == "127.0.0.1:8080"
+        assert pebble_env["OPENFGA_AUTHORIZATION_MODEL_ID"] == "01HQJMD174NPN2A4JFRFZ1NNW1"
 
-    def test_authorization_disabled_when_missing_openfga_model_id(
-        self, harness: Harness, mocked_openfga_store_info: MagicMock
+    def test_service_not_started_when_missing_openfga_model_id(
+        self,
+        harness: Harness,
+        mocked_openfga_store_info: MagicMock,
+        mocked_openfga_model_id: MagicMock,
     ) -> None:
+        mocked_openfga_model_id.return_value = None
         harness.set_can_connect(WORKLOAD_CONTAINER_NAME, True)
-        harness.charm.on.admin_ui_pebble_ready.emit(WORKLOAD_CONTAINER_NAME)
+        setup_peer_relation(harness)
         setup_openfga_relation(harness)
+        setup_kratos_relation(harness)
+        setup_hydra_relation(harness)
 
-        pebble_env = harness.charm._admin_ui_pebble_layer.to_dict()["services"][
-            WORKLOAD_SERVICE_NAME
-        ]["environment"]
-
-        assert pebble_env["AUTHORIZATION_ENABLED"] is False
+        assert harness.model.unit.get_container(WORKLOAD_CONTAINER_NAME).get_services() == {}
 
 
 class TestUpgradeEvent:

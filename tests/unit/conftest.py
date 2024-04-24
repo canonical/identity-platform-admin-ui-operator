@@ -85,9 +85,10 @@ def mocked_openfga_store_info(mocker: MockerFixture) -> MagicMock:
 
 
 @pytest.fixture()
-def mocked_openfga_model_id(mocker: MockerFixture) -> MagicMock:
+def mocked_openfga_model_id(mocker: MockerFixture):
     return mocker.patch(
         "charm.IdentityPlatformAdminUIOperatorCharm._openfga_model_id",
+        new_callable=mocker.PropertyMock,
         return_value="01HQJMD174NPN2A4JFRFZ1NNW1",
     )
 

@@ -287,6 +287,12 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             self._container.make_dir(path=str(LOG_DIR), make_parents=True)
             logger.info(f"Created directory {LOG_DIR}")
 
+        if not (self._get_openfga_store_info() and self._openfga_model_id):
+            logger.info("Openfga store and model unavailable, deferring the event")
+            event.defer()
+            self.unit.status = WaitingStatus("Waiting for openfga store and model")
+            return
+
         self._container.add_layer(
             WORKLOAD_CONTAINER_NAME, self._admin_ui_pebble_layer, combine=True
         )
@@ -406,9 +412,16 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         """Define pebble layer."""
         kratos_info = self._get_kratos_info()
         oathkeeper_info = self._get_oathkeeper_info()
+        openfga_info = self._get_openfga_store_info()
+        openfga_url = urlparse(openfga_info.http_api_url)
 
         container_env = {
-            "AUTHORIZATION_ENABLED": False,
+            "AUTHORIZATION_ENABLED": True,
+            "OPENFGA_AUTHORIZATION_MODEL_ID": self._openfga_model_id,
+            "OPENFGA_STORE_ID": openfga_info.store_id,
+            "OPENFGA_API_TOKEN": openfga_info.token,
+            "OPENFGA_API_SCHEME": openfga_url.scheme,
+            "OPENFGA_API_HOST": openfga_url.netloc,
             "KRATOS_ADMIN_URL": kratos_info.get("admin_endpoint", ""),
             "KRATOS_PUBLIC_URL": kratos_info.get("public_endpoint", ""),
             "HYDRA_ADMIN_URL": self._get_hydra_endpoint_info(),
@@ -431,18 +444,6 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             container_env["TRACING_ENABLED"] = True
             container_env["OTEL_HTTP_ENDPOINT"] = self._tracing_endpoint_info_http
             container_env["OTEL_GRPC_ENDPOINT"] = self._tracing_endpoint_info_grpc
-
-        if (openfga_info := self._get_openfga_store_info()) and (
-            model_id := self._openfga_model_id
-        ):
-            openfga_url = urlparse(openfga_info.http_api_url)
-
-            container_env["AUTHORIZATION_ENABLED"] = True
-            container_env["OPENFGA_AUTHORIZATION_MODEL_ID"] = model_id
-            container_env["OPENFGA_STORE_ID"] = openfga_info.store_id
-            container_env["OPENFGA_API_TOKEN"] = openfga_info.token
-            container_env["OPENFGA_API_SCHEME"] = openfga_url.scheme
-            container_env["OPENFGA_API_HOST"] = openfga_url.netloc
 
         pebble_layer = {
             "summary": "Pebble Layer for Identity Platform Admin UI",

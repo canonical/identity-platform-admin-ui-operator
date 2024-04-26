@@ -50,7 +50,7 @@ class AdminUICLI:
 
         stdout, _ = self._run_cmd(cmd)
 
-        out_re = r"Created model:\s*(.+)\s*$"
+        out_re = r"Created model:\s*(.+)"
         model = re.search(out_re, stdout)
         if model:
             return model[1]

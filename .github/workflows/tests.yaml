@@ -31,7 +31,7 @@ jobs:
         with:
           provider: microk8s
           channel: 1.28-strict/stable
-          juju-channel: 3.1
+          juju-channel: 3.4
 
       - name: Run integration tests
         # set a predictable model name

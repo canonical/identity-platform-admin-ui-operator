@@ -5,6 +5,7 @@
 # Learn more at: https://juju.is/docs/sdk
 
 """A Juju Kubernetes charmed operator for Identity Platform Admin UI."""
+
 import json
 import logging
 from typing import Dict, Optional
@@ -358,7 +359,7 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             return
 
         logger.info(f"Successfully created an openfga model: {model_id}")
-        self._set_peer_data(key=self._get_version(), data=dict(openfga_model_id=model_id))
+        self._set_peer_data(key=self._get_version(), data={"openfga_model_id": model_id})
 
     def _get_version(self) -> Optional[str]:
         try:

@@ -104,23 +104,19 @@ def setup_loki_relation(harness: Harness) -> int:
     relation_id = harness.add_relation("logging", "loki-k8s")
     harness.add_relation_unit(relation_id, "loki-k8s/0")
     databag = {
-        "promtail_binary_zip_url": json.dumps(
-            {
-                "amd64": {
-                    "filename": "promtail-static-amd64",
-                    "zipsha": "543e333b0184e14015a42c3c9e9e66d2464aaa66eca48b29e185a6a18f67ab6d",
-                    "binsha": "17e2e271e65f793a9fbe81eab887b941e9d680abe82d5a0602888c50f5e0cac9",
-                    "url": "https://github.com/canonical/loki-k8s-operator/releases/download/promtail-v2.5.0/promtail-static-amd64.gz",
-                }
+        "promtail_binary_zip_url": json.dumps({
+            "amd64": {
+                "filename": "promtail-static-amd64",
+                "zipsha": "543e333b0184e14015a42c3c9e9e66d2464aaa66eca48b29e185a6a18f67ab6d",
+                "binsha": "17e2e271e65f793a9fbe81eab887b941e9d680abe82d5a0602888c50f5e0cac9",
+                "url": "https://github.com/canonical/loki-k8s-operator/releases/download/promtail-v2.5.0/promtail-static-amd64.gz",
             }
-        ),
+        }),
     }
     unit_databag = {
-        "endpoint": json.dumps(
-            {
-                "url": "http://loki-k8s-0.loki-k8s-endpoints.cos.svc.cluster.local:3100/loki/api/v1/push"
-            }
-        )
+        "endpoint": json.dumps({
+            "url": "http://loki-k8s-0.loki-k8s-endpoints.cos.svc.cluster.local:3100/loki/api/v1/push"
+        })
     }
     harness.update_relation_data(
         relation_id,

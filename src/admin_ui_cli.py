@@ -3,7 +3,6 @@
 
 """A helper class for interacting with the Admin UI CLI."""
 
-
 import logging
 import re
 from typing import List, Optional, Tuple, Union

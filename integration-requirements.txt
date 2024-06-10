@@ -1,3 +1,4 @@
+ipdb
 pytest
 juju
 pytest-operator==0.31.1

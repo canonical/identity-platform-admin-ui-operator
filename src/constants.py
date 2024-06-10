@@ -3,7 +3,7 @@
 
 """Constants for the charm."""
 
-from pathlib import PurePath
+from pathlib import Path, PurePath
 
 # Charm constants
 WORKLOAD_CONTAINER_NAME = "admin-ui"
@@ -29,4 +29,7 @@ KRATOS_INFO_INTEGRATION_NAME = "kratos-info"
 OATHKEEPER_INFO_INTEGRATION_NAME = "oathkeeper-info"
 OPENFGA_INTEGRATION_NAME = "openfga"
 OPENFGA_STORE_NAME = "identity-platform-admin-ui-store"
+CERTIFICATE_TRANSFER_NAME = "receive-ca-cert"
 PEER = "identity-platform-admin-ui"
+
+CA_CERT_DIR_PATH = Path("/etc/ssl/certs/")

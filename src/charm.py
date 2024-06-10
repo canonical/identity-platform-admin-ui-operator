@@ -13,6 +13,11 @@ import socket
 from typing import Dict, Optional
 from urllib.parse import urlparse
 
+from charms.certificate_transfer_interface.v0.certificate_transfer import (
+    CertificateAvailableEvent,
+    CertificateRemovedEvent,
+    CertificateTransferRequires,
+)
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.hydra.v0.hydra_endpoints import (
     HydraEndpointsRelationDataMissingError,
@@ -55,6 +60,8 @@ from admin_ui_cli import AdminUICLI, CommandOutputParseExceptionError
 from constants import (
     ADMIN_UI_COMMAND,
     ADMIN_UI_PORT,
+    CA_CERT_DIR_PATH,
+    CERTIFICATE_TRANSFER_NAME,
     GRAFANA_DASHBOARD_INTEGRATION_NAME,
     HYDRA_ENDPOINTS_INTEGRATION_NAME,
     KRATOS_INFO_INTEGRATION_NAME,
@@ -140,6 +147,8 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         if self._oauth_client_config:
             self.oauth = OAuthRequirer(self, self._oauth_client_config)
 
+        self.certificate_transfer = CertificateTransferRequires(self, CERTIFICATE_TRANSFER_NAME)
+
         self.framework.observe(self.on.admin_ui_pebble_ready, self._on_admin_ui_pebble_ready)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.upgrade_charm, self._on_upgrade_charm)
@@ -167,6 +176,13 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
 
         self.framework.observe(self.oauth.on.oauth_info_changed, self._on_oauth_info_changed)
         self.framework.observe(self.oauth.on.oauth_info_removed, self._on_oauth_info_changed)
+
+        self.framework.observe(
+            self.certificate_transfer.on.certificate_available, self._on_certificate_available
+        )
+        self.framework.observe(
+            self.certificate_transfer.on.certificate_removed, self._on_certificate_removed
+        )
 
         self.framework.observe(
             self.openfga.on.openfga_store_created,
@@ -211,6 +227,12 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         self._handle_status_update_config(event)
 
     def _on_oauth_info_changed(self, event: OAuthInfoChangedEvent) -> None:
+        self._handle_status_update_config(event)
+
+    def _on_certificate_available(self, event: CertificateAvailableEvent) -> None:
+        self._handle_status_update_config(event)
+
+    def _on_certificate_removed(self, event: CertificateRemovedEvent) -> None:
         self._handle_status_update_config(event)
 
     def _on_openfga_store_created(self, event: OpenFGAStoreCreateEvent) -> None:
@@ -302,6 +324,8 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         if not self._container.isdir(str(LOG_DIR)):
             self._container.make_dir(path=str(LOG_DIR), make_parents=True)
             logger.info(f"Created directory {LOG_DIR}")
+
+        self._push_ca_certs()
 
         if not (self._get_openfga_store_info() and self._openfga_model_id):
             logger.info("Openfga store and model unavailable, deferring the event")
@@ -412,6 +436,18 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             return {}
         data = peers.data[self.app].pop(key, "")
         return json.loads(data) if data else {}
+
+    def _push_ca_certs(self) -> None:
+        self._container.push(CA_CERT_DIR_PATH / "ca_certificates.crt", self._trusted_certs_bundle, make_dirs=True)
+
+    @property
+    def _trusted_certs_bundle(self) -> str:
+        bundle = []
+        for relation in self.model.relations.get(self.certificate_transfer.relationship_name, []):
+            for unit in set(relation.units).difference([self.app, self.unit]):
+                if ca := relation.data[unit].get("ca"):
+                    bundle.append(ca)
+        return "\n".join(bundle)
 
     @property
     def _peers(self) -> Optional[Relation]:

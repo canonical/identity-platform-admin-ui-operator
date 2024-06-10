@@ -15,6 +15,9 @@ ADMIN_UI_PORT = 8080
 LOG_DIR = PurePath("/var/log")
 LOG_FILE = LOG_DIR / "admin_ui.log"
 RULES_CONFIGMAP_FILE_NAME = "admin_ui_rules.json"
+OAUTH_SCOPES = "openid,email,profile,offline_access"
+OAUTH_GRANT_TYPES = ["authorization_code", "refresh_token"]
+OAUTH_CALLBACK_PATH = "api/v0/auth/callback"
 
 # Relation constants
 PROMETHEUS_SCRAPE_INTEGRATION_NAME = "metrics-endpoint"

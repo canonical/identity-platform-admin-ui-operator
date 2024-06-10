@@ -8,6 +8,8 @@
 
 import json
 import logging
+import os
+import socket
 from typing import Dict, Optional
 from urllib.parse import urlparse
 
@@ -17,6 +19,7 @@ from charms.hydra.v0.hydra_endpoints import (
     HydraEndpointsRelationMissingError,
     HydraEndpointsRequirer,
 )
+from charms.hydra.v0.oauth import ClientConfig, OAuthInfoChangedEvent, OAuthRequirer
 from charms.kratos.v0.kratos_info import KratosInfoRelationDataMissingError, KratosInfoRequirer
 from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer, PromtailDigestError
 from charms.oathkeeper.v0.oathkeeper_info import (
@@ -59,6 +62,9 @@ from constants import (
     LOG_FILE,
     LOKI_API_PUSH_INTEGRATION_NAME,
     OATHKEEPER_INFO_INTEGRATION_NAME,
+    OAUTH_CALLBACK_PATH,
+    OAUTH_GRANT_TYPES,
+    OAUTH_SCOPES,
     OPENFGA_INTEGRATION_NAME,
     OPENFGA_STORE_NAME,
     PEER,
@@ -131,6 +137,9 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             self, relation_name=GRAFANA_DASHBOARD_INTEGRATION_NAME
         )
 
+        if self._oauth_client_config:
+            self.oauth = OAuthRequirer(self, self._oauth_client_config)
+
         self.framework.observe(self.on.admin_ui_pebble_ready, self._on_admin_ui_pebble_ready)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.upgrade_charm, self._on_upgrade_charm)
@@ -155,6 +164,9 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             self.on[OATHKEEPER_INFO_INTEGRATION_NAME].relation_changed,
             self._on_config_changed,
         )
+
+        self.framework.observe(self.oauth.on.oauth_info_changed, self._on_oauth_info_changed)
+        self.framework.observe(self.oauth.on.oauth_info_removed, self._on_oauth_info_changed)
 
         self.framework.observe(
             self.openfga.on.openfga_store_created,
@@ -193,12 +205,13 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         self._handle_status_update_config(event)
 
     def _on_ingress_ready(self, event: IngressPerAppReadyEvent) -> None:
-        if self.unit.is_leader():
-            logger.info("This app's public ingress URL: %s", event.url)
+        self._handle_status_update_config(event)
 
     def _on_ingress_revoked(self, event: IngressPerAppRevokedEvent) -> None:
-        if self.unit.is_leader():
-            logger.info("This app no longer has ingress")
+        self._handle_status_update_config(event)
+
+    def _on_oauth_info_changed(self, event: OAuthInfoChangedEvent) -> None:
+        self._handle_status_update_config(event)
 
     def _on_openfga_store_created(self, event: OpenFGAStoreCreateEvent) -> None:
         """Handle openfga store created event."""
@@ -282,6 +295,8 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             return
 
         self.unit.status = MaintenanceStatus("Configuring the container")
+
+        self.oauth.update_client_config(client_config=self._oauth_client_config)
 
         # Make sure the directory for the logfile exists
         if not self._container.isdir(str(LOG_DIR)):
@@ -435,11 +450,28 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             "RULES_CONFIGMAP_NAMESPACE": oathkeeper_info.get("configmaps_namespace", ""),
             "RULES_CONFIGMAP_FILE_NAME": RULES_CONFIGMAP_FILE_NAME,
             "PORT": str(ADMIN_UI_PORT),
+            "BASE_URL": self._domain_url,
             "TRACING_ENABLED": False,
             "LOG_LEVEL": self._log_level,
             "LOG_FILE": str(LOG_FILE),
             "DEBUG": self._log_level == "DEBUG",
+            "AUTHENTICATION_ENABLED": False,
         }
+
+        if self.oauth.is_client_created():
+            oauth_provider_info = self.oauth.get_provider_info()
+
+            container_env.update({
+                "AUTHENTICATION_ENABLED": True,
+                "OIDC_ISSUER": oauth_provider_info.issuer_url,
+                "OAUTH2_CLIENT_ID": oauth_provider_info.client_id,
+                "OAUTH2_CLIENT_SECRET": oauth_provider_info.client_secret,
+                "OAUTH2_REDIRECT_URI": os.path.join(self._domain_url, OAUTH_CALLBACK_PATH),
+                "OAUTH2_CODEGRANT_SCOPES": OAUTH_SCOPES,
+                "ACCESS_TOKEN_VERIFICATION_STRATEGY": "jwks"
+                if oauth_provider_info.jwt_access_token
+                else "userinfo",
+            })
 
         if self._tracing_ready:
             container_env["TRACING_ENABLED"] = True
@@ -482,6 +514,29 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
     @property
     def _log_level(self) -> str:
         return self.config["log_level"]
+
+    @property
+    def _domain_url(self) -> Optional[str]:
+        return self.ingress.url if self.ingress.is_ready()
+
+    @property
+    def _oauth_client_config(self) -> Optional[ClientConfig]:
+        if not self._domain_url:
+            return
+
+        c = ClientConfig(
+            os.path.join(self._domain_url, OAUTH_CALLBACK_PATH),
+            OAUTH_SCOPES,
+            OAUTH_GRANT_TYPES,
+        )
+        # Bootstrap the client config to have the client_id as an aud.
+        # TODO(nsklikas): Remove when the login-ui automatically adds it to the audience
+        # https://github.com/canonical/identity-platform-login-ui/issues/244
+        if hasattr(self, "oauth"):
+            oauth_provider_info = self.oauth.get_provider_info()
+            if oauth_provider_info and oauth_provider_info.client_id:
+                c.audience = [oauth_provider_info.client_id]
+        return c
 
 
 if __name__ == "__main__":  # pragma: nocover

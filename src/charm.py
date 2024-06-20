@@ -64,6 +64,7 @@ from constants import (
     CERTIFICATE_TRANSFER_NAME,
     GRAFANA_DASHBOARD_INTEGRATION_NAME,
     HYDRA_ENDPOINTS_INTEGRATION_NAME,
+    INGRESS_INTEGRATION_NAME,
     KRATOS_INFO_INTEGRATION_NAME,
     LOG_DIR,
     LOG_FILE,
@@ -71,6 +72,7 @@ from constants import (
     OATHKEEPER_INFO_INTEGRATION_NAME,
     OAUTH_CALLBACK_PATH,
     OAUTH_GRANT_TYPES,
+    OAUTH_INTEGRATION_NAME,
     OAUTH_SCOPES,
     OPENFGA_INTEGRATION_NAME,
     OPENFGA_STORE_NAME,
@@ -103,7 +105,7 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
 
         self.ingress = IngressPerAppRequirer(
             self,
-            relation_name="ingress",
+            relation_name=INGRESS_INTEGRATION_NAME,
             port=ADMIN_UI_PORT,
             strip_prefix=True,
             redirect_https=False,
@@ -144,8 +146,7 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             self, relation_name=GRAFANA_DASHBOARD_INTEGRATION_NAME
         )
 
-        if self._oauth_client_config:
-            self.oauth = OAuthRequirer(self, self._oauth_client_config)
+        self.oauth = OAuthRequirer(self, self._oauth_client_config, OAUTH_INTEGRATION_NAME)
 
         self.certificate_transfer = CertificateTransferRequires(self, CERTIFICATE_TRANSFER_NAME)
 
@@ -316,6 +317,13 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             self.unit.status = BlockedStatus("Missing required relation with openfga")
             return
 
+        if (
+            self.model.relations[OAUTH_INTEGRATION_NAME]
+            and not self.model.relations[INGRESS_INTEGRATION_NAME]
+        ):
+            self.unit.status = BlockedStatus("Ingress relation is required for oauth")
+            return
+
         self.unit.status = MaintenanceStatus("Configuring the container")
 
         self.oauth.update_client_config(client_config=self._oauth_client_config)
@@ -438,7 +446,9 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         return json.loads(data) if data else {}
 
     def _push_ca_certs(self) -> None:
-        self._container.push(CA_CERT_DIR_PATH / "ca_certificates.crt", self._trusted_certs_bundle, make_dirs=True)
+        self._container.push(
+            CA_CERT_DIR_PATH / "ca_certificates.crt", self._trusted_certs_bundle, make_dirs=True
+        )
 
     @property
     def _trusted_certs_bundle(self) -> str:
@@ -502,7 +512,7 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
                 "OIDC_ISSUER": oauth_provider_info.issuer_url,
                 "OAUTH2_CLIENT_ID": oauth_provider_info.client_id,
                 "OAUTH2_CLIENT_SECRET": oauth_provider_info.client_secret,
-                "OAUTH2_REDIRECT_URI": os.path.join(self._domain_url, OAUTH_CALLBACK_PATH),
+                "OAUTH2_REDIRECT_URI": self._redirect_uri,
                 "OAUTH2_CODEGRANT_SCOPES": OAUTH_SCOPES,
                 "ACCESS_TOKEN_VERIFICATION_STRATEGY": "jwks"
                 if oauth_provider_info.jwt_access_token
@@ -552,18 +562,24 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         return self.config["log_level"]
 
     @property
-    def _domain_url(self) -> Optional[str]:
-        return self.ingress.url if self.ingress.is_ready()
+    def _internal_url(self) -> str:
+        """Return workload's internal URL. Used for ingress."""
+        return f"http://{socket.getfqdn()}:{ADMIN_UI_PORT}"
+
+    @property
+    def _domain_url(self) -> str:
+        return self.ingress.url if self.ingress.is_ready() else self._internal_url
+
+    @property
+    def _redirect_uri(self) -> Optional[str]:
+        return os.path.join(self._domain_url, OAUTH_CALLBACK_PATH)
 
     @property
     def _oauth_client_config(self) -> Optional[ClientConfig]:
-        if not self._domain_url:
-            return
-
         c = ClientConfig(
-            os.path.join(self._domain_url, OAUTH_CALLBACK_PATH),
-            OAUTH_SCOPES,
-            OAUTH_GRANT_TYPES,
+            redirect_uri=self._redirect_uri,
+            scope=OAUTH_SCOPES,
+            grant_types=OAUTH_GRANT_TYPES,
         )
         # Bootstrap the client config to have the client_id as an aud.
         # TODO(nsklikas): Remove when the login-ui automatically adds it to the audience

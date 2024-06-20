@@ -399,6 +399,55 @@ class TestOathkeeperRelation:
         assert pebble_env["RULES_CONFIGMAP_NAMESPACE"] == "testing"
 
 
+class TestOauthRelation:
+    def test_oauth_relation_without_ingress_relation(
+        self, harness: Harness, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        caplog.set_level(logging.INFO)
+        harness.set_can_connect(WORKLOAD_CONTAINER_NAME, True)
+        setup_peer_relation(harness)
+        setup_kratos_relation(harness)
+        setup_hydra_relation(harness)
+        setup_openfga_relation(harness)
+
+        _, _ = setup_oauth_relation(harness)
+
+        assert isinstance(harness.charm.unit.status, BlockedStatus)
+
+    def test_oauth_relation(self, harness: Harness, caplog: pytest.LogCaptureFixture) -> None:
+        caplog.set_level(logging.INFO)
+        harness.set_can_connect(WORKLOAD_CONTAINER_NAME, True)
+        setup_peer_relation(harness)
+        setup_kratos_relation(harness)
+        setup_hydra_relation(harness)
+        setup_openfga_relation(harness)
+
+        oauth_relation_id, _ = setup_oauth_relation(harness)
+        _, url = setup_ingress_relation(harness)
+
+        data = harness.get_relation_data(oauth_relation_id, harness.charm.app)
+
+        assert data["redirect_uri"] == os.path.join(url, OAUTH_CALLBACK_PATH)
+
+    def test_oauth_relation_with_ingress_revoked(
+        self, harness: Harness, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        caplog.set_level(logging.INFO)
+        harness.set_can_connect(WORKLOAD_CONTAINER_NAME, True)
+        setup_peer_relation(harness)
+        setup_kratos_relation(harness)
+        setup_hydra_relation(harness)
+        setup_openfga_relation(harness)
+
+        oauth_relation_id, _ = setup_oauth_relation(harness)
+        relation_id, _ = setup_ingress_relation(harness)
+
+        _ = harness.get_relation_data(oauth_relation_id, harness.charm.app)
+        harness.remove_relation(relation_id)
+
+        assert isinstance(harness.charm.unit.status, BlockedStatus)
+
+
 class TestIngressRelation:
     def test_ingress_relation_created(self, harness: Harness) -> None:
         harness.set_can_connect(WORKLOAD_CONTAINER_NAME, True)
@@ -415,29 +464,6 @@ class TestIngressRelation:
             "strip-prefix": json.dumps(True),
             "redirect-https": json.dumps(False),
         }
-
-    def test_ingress_relation_revoked_with_oauth_relation(
-        self, harness: Harness, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        caplog.set_level(logging.INFO)
-        harness.set_can_connect(WORKLOAD_CONTAINER_NAME, True)
-        setup_peer_relation(harness)
-        setup_kratos_relation(harness)
-        setup_hydra_relation(harness)
-        setup_openfga_relation(harness)
-
-        oauth_relation_id, _ = setup_oauth_relation(harness)
-        relation_id, url = setup_ingress_relation(harness)
-
-        data = harness.get_relation_data(oauth_relation_id, harness.charm.app)
-
-        assert data["redirect_uri"] == os.path.join(url, OAUTH_CALLBACK_PATH)
-
-        harness.remove_relation(relation_id)
-
-        assert data["redirect_uri"] == os.path.join(
-            harness.charm._internal_url, OAUTH_CALLBACK_PATH
-        )
 
 
 class TestOpenFGARelation:

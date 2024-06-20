@@ -29,6 +29,8 @@ KRATOS_INFO_INTEGRATION_NAME = "kratos-info"
 OATHKEEPER_INFO_INTEGRATION_NAME = "oathkeeper-info"
 OPENFGA_INTEGRATION_NAME = "openfga"
 OPENFGA_STORE_NAME = "identity-platform-admin-ui-store"
+OAUTH_INTEGRATION_NAME = "oauth"
+INGRESS_INTEGRATION_NAME = "ingress"
 CERTIFICATE_TRANSFER_NAME = "receive-ca-cert"
 PEER = "identity-platform-admin-ui"
 

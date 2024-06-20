@@ -1,5 +1,6 @@
-pytest
+-r requirements.txt
 juju
+git+https://github.com/canonical/iam-bundle@oauth_tools-v0.1.0#egg=oauth_tools
+pytest
 pytest-operator==0.31.1
 requests
--r requirements.txt

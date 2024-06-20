@@ -1,161 +1,212 @@
 #!/usr/bin/env python3
-# Copyright 2023 Canonical Ltd.
+# Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+import json
 import logging
-from pathlib import Path
+from typing import Callable, Optional
 
 import pytest
-import requests
-import yaml
+from conftest import (
+    ADMIN_SERVICE_APP,
+    ADMIN_SERVICE_IMAGE,
+    DB_APP,
+    OATHKEEPER_APP,
+    OPENFGA_APP,
+    remove_integration,
+)
+from juju.application import Application
+from oauth_tools import ExternalIdpService, deploy_identity_bundle
 from pytest_operator.plugin import OpsTest
 
+pytest_plugins = ["oauth_tools.fixtures"]
 logger = logging.getLogger(__name__)
 
-METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
-APP_NAME = METADATA["name"]
-TRAEFIK = "traefik-k8s"
-DB_APP = "postgresql-k8s"
-HYDRA = "hydra"
-KRATOS = "kratos"
-OATHKEEPER = "oathkeeper"
-OPENFGA = "openfga-k8s"
 
-
-async def get_unit_address(ops_test: OpsTest, app_name: str, unit_num: int) -> str:
-    """Get private address of a unit."""
-    status = await ops_test.model.get_status()  # noqa: F821
-    return status["applications"][app_name]["units"][f"{app_name}/{unit_num}"]["address"]
-
-
+@pytest.mark.skip_if_deployed
 @pytest.mark.abort_on_fail
-async def test_build_and_deploy(ops_test: OpsTest):
-    """Build the charm-under-test and deploy it.
-
-    Assert on the unit status before any relations/configurations take place.
-    """
-    charm = await ops_test.build_charm(".")
-    resources = {"oci-image": METADATA["resources"]["oci-image"]["upstream-source"]}
+async def test_build_and_deploy(
+    ops_test: OpsTest,
+    hydra_app_name: str,
+    kratos_app_name: str,
+    public_traefik_app_name: str,
+    ext_idp_service: ExternalIdpService,
+) -> None:
+    charm_file = await ops_test.build_charm(".")
+    resources = {"oci-image": ADMIN_SERVICE_IMAGE}
     await ops_test.model.deploy(
-        charm, resources=resources, application_name=APP_NAME, trust=True, series="jammy"
+        str(charm_file),
+        resources=resources,
+        application_name=ADMIN_SERVICE_APP,
+        trust=True,
+        series="jammy",
     )
 
     # Deploy dependencies
-    await ops_test.model.deploy(
-        entity_url=DB_APP,
-        channel="14/stable",
-        series="jammy",
-        trust=True,
+    await deploy_identity_bundle(
+        ops_test=ops_test,
+        bundle_channel="latest/edge",
+        ext_idp_service=ext_idp_service,
     )
+
     await ops_test.model.deploy(
-        TRAEFIK,
-        channel="latest/edge",
-        config={"external_hostname": "some_hostname"},
-    )
-    await ops_test.model.deploy(
-        entity_url=OPENFGA,
+        entity_url=OPENFGA_APP,
         channel="latest/edge",
         series="jammy",
         trust=True,
     )
+    await ops_test.model.integrate(OPENFGA_APP, DB_APP)
+
     await ops_test.model.deploy(
-        entity_url=KRATOS,
-        channel="latest/edge",
-        series="jammy",
-        trust=True,
-    )
-    await ops_test.model.deploy(
-        entity_url=HYDRA,
+        entity_url=OATHKEEPER_APP,
         channel="latest/edge",
         series="jammy",
         trust=True,
     )
 
-    await ops_test.model.integrate(OPENFGA, DB_APP)
-    await ops_test.model.wait_for_idle([OPENFGA, DB_APP], status="active", timeout=1000)
-
-    await ops_test.model.integrate(HYDRA, DB_APP)
-    await ops_test.model.integrate(f"{HYDRA}:public-ingress", TRAEFIK)
-    await ops_test.model.integrate(KRATOS, DB_APP)
-
-    await ops_test.model.integrate(f"{APP_NAME}:hydra-endpoint-info", HYDRA)
-    await ops_test.model.integrate(f"{APP_NAME}:kratos-info", KRATOS)
-    await ops_test.model.integrate(APP_NAME, OPENFGA)
+    # Integrate with dependencies
+    await ops_test.model.integrate(
+        f"{ADMIN_SERVICE_APP}:kratos-info",
+        kratos_app_name,
+    )
+    await ops_test.model.integrate(
+        f"{ADMIN_SERVICE_APP}:hydra-endpoint-info",
+        hydra_app_name,
+    )
+    await ops_test.model.integrate(ADMIN_SERVICE_APP, OPENFGA_APP)
+    await ops_test.model.integrate(f"{ADMIN_SERVICE_APP}:oathkeeper-info", OATHKEEPER_APP)
+    await ops_test.model.integrate(ADMIN_SERVICE_APP, public_traefik_app_name)
 
     await ops_test.model.wait_for_idle(
-        apps=[APP_NAME, DB_APP, HYDRA, KRATOS, OPENFGA],
         status="active",
-        raise_on_blocked=False,
-        # TODO: Switch to true
-        #  when https://github.com/canonical/openfga-operator/issues/25 is solved
-        raise_on_error=False,
         timeout=1000,
     )
 
 
-async def test_ingress_relation(ops_test: OpsTest):
-    await ops_test.model.add_relation(f"{APP_NAME}:ingress", TRAEFIK)
+def test_kratos_integration(leader_kratos_integration_data: Optional[dict]) -> None:
+    assert leader_kratos_integration_data
+    assert all(leader_kratos_integration_data.values())
+
+
+def test_hydra_endpoint_integration(
+    leader_hydra_endpoint_integration_data: Optional[dict],
+) -> None:
+    assert leader_hydra_endpoint_integration_data
+    assert all(leader_hydra_endpoint_integration_data.values())
+
+
+def test_openfga_integration(leader_openfga_integration_data: Optional[dict]) -> None:
+    assert leader_openfga_integration_data
+    assert all(leader_openfga_integration_data.values())
+
+
+def test_oathkeeper_integration(leader_oathkeeper_integration_data: Optional[dict]) -> None:
+    assert leader_oathkeeper_integration_data
+    assert all(leader_oathkeeper_integration_data.values())
+
+
+def test_ingress_integration(
+    ops_test: OpsTest, leader_ingress_integration_data: Optional[dict]
+) -> None:
+    assert leader_ingress_integration_data
+    assert leader_ingress_integration_data["ingress"]
+
+    data = json.loads(leader_ingress_integration_data["ingress"])
+    assert f"{ops_test.model_name}-{ADMIN_SERVICE_APP}" in data["url"]
+
+
+def test_peer_integration(
+    leader_peer_integration_data: Optional[dict],
+    admin_service_version: str,
+) -> None:
+    assert leader_peer_integration_data
+    assert leader_peer_integration_data[admin_service_version]
+
+    openfga_model = json.loads(leader_peer_integration_data[admin_service_version])
+    assert openfga_model["openfga_model_id"]
+
+
+async def test_scale_up(
+    ops_test: OpsTest,
+    admin_service_application: Application,
+    leader_openfga_integration_data: Optional[dict],
+    leader_peer_integration_data: Optional[dict],
+    app_integration_data: Callable,
+) -> None:
+    target_unit_number = 2
+
+    await admin_service_application.scale(target_unit_number)
 
     await ops_test.model.wait_for_idle(
-        apps=[APP_NAME, TRAEFIK],
+        apps=[ADMIN_SERVICE_APP],
         status="active",
-        raise_on_blocked=True,
         timeout=1000,
+        wait_for_exact_units=target_unit_number,
     )
 
+    follower_peer_data = app_integration_data(ADMIN_SERVICE_APP, ADMIN_SERVICE_APP, 1)
+    assert follower_peer_data
+    assert leader_peer_integration_data == follower_peer_data
 
-async def test_has_ingress(ops_test: OpsTest):
-    """Get the traefik address and try to reach identity-platform-admin-ui."""
-    public_address = await get_unit_address(ops_test, TRAEFIK, 0)
-
-    resp = requests.get(f"http://{public_address}/{ops_test.model.name}-{APP_NAME}/api/v0/status")
-
-    assert resp.status_code == 200
+    follower_openfga_data = app_integration_data(ADMIN_SERVICE_APP, "openfga", 1)
+    assert follower_openfga_data
+    assert follower_openfga_data == leader_openfga_integration_data
 
 
-async def test_oathkeeper_relation(ops_test: OpsTest):
-    await ops_test.model.deploy(
-        entity_url=OATHKEEPER,
-        channel="latest/edge",
-        series="jammy",
-        trust=True,
-    )
+async def test_scale_down(
+    ops_test: OpsTest,
+    admin_service_application: Application,
+    leader_openfga_integration_data: Optional[dict],
+    leader_peer_integration_data: Optional[dict],
+) -> None:
+    target_unit_num = 1
 
-    await ops_test.model.add_relation(f"{APP_NAME}:oathkeeper-info", OATHKEEPER)
+    await admin_service_application.scale(target_unit_num)
 
     await ops_test.model.wait_for_idle(
-        apps=[APP_NAME, OATHKEEPER],
+        apps=[ADMIN_SERVICE_APP],
         status="active",
-        raise_on_blocked=False,
-        raise_on_error=False,
         timeout=1000,
+        wait_for_exact_units=target_unit_num,
     )
 
-
-async def test_scale_up(ops_test: OpsTest) -> None:
-    """Check that Admin UI works after it is scaled up."""
-    app = ops_test.model.applications[APP_NAME]
-
-    await app.scale(2)
-
-    await ops_test.model.wait_for_idle(
-        apps=[APP_NAME],
-        status="active",
-        raise_on_blocked=False,
-        timeout=1000,
-        wait_for_exact_units=2,
-    )
+    assert leader_peer_integration_data
+    assert leader_openfga_integration_data
 
 
-async def test_scale_down(ops_test: OpsTest) -> None:
-    """Check that Admin UI works after it is scaled down."""
-    app = ops_test.model.applications[APP_NAME]
+async def test_remove_integration_with_openfga(
+    ops_test: OpsTest,
+    admin_service_application: Application,
+) -> None:
+    async with remove_integration(ops_test, OPENFGA_APP):
+        assert "blocked" == admin_service_application.status
 
-    await app.scale(1)
 
-    await ops_test.model.wait_for_idle(
-        apps=[APP_NAME],
-        status="active",
-        raise_on_blocked=False,
-        timeout=1000,
-    )
+@pytest.mark.xfail(reason="not implemented yet")
+async def test_remove_integration_with_kratos(
+    ops_test: OpsTest,
+    kratos_app_name: str,
+    admin_service_application: Application,
+) -> None:
+    async with remove_integration(ops_test, kratos_app_name):
+        assert "blocked" == admin_service_application.status
+
+
+@pytest.mark.xfail(reason="not implemented yet")
+async def test_remove_integration_with_hydra(
+    ops_test: OpsTest,
+    hydra_app_name: str,
+    admin_service_application: Application,
+) -> None:
+    async with remove_integration(ops_test, hydra_app_name):
+        assert "blocked" == admin_service_application.status
+
+
+@pytest.mark.xfail(reason="not implemented yet")
+async def test_remove_integration_with_ingress(
+    ops_test: OpsTest,
+    public_traefik_app_name: str,
+    admin_service_application: Application,
+) -> None:
+    async with remove_integration(ops_test, public_traefik_app_name):
+        assert "blocked" == admin_service_application.status

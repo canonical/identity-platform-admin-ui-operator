@@ -10,7 +10,7 @@ description: |
 
   The Identity Platform Admin UI provides users a graphic interface
   to display the real-time status of the Identity Platform, as well
-  as to make granular adjustments. 
+  as to make granular adjustments.
 summary: |
   Identity and user management system
 
@@ -21,7 +21,7 @@ resources:
   oci-image:
     type: oci-image
     description: Identity Platform Admin UI oci-image
-    upstream-source: ghcr.io/canonical/identity-platform-admin-ui:v1.5.0
+    upstream-source: ghcr.io/canonical/identity-platform-admin-ui:v1.10.0
 
 requires:
   hydra-endpoint-info:
@@ -44,6 +44,18 @@ requires:
   openfga:
     interface: openfga
     limit: 1
+  oauth:
+    interface: oauth
+    limit: 1
+    description: |
+      Receive oauth server's info and a set of client credentials.
+      This relation can be used to integrate the admin UI with an oAuth2/OIDC Provider.
+  receive-ca-cert:
+    interface: certificate_transfer
+    description: |
+      Receive a CA cert.
+      This relation can be used with a local CA to obtain the CA cert that was used to sign proxied
+      endpoints.
 
 provides:
   metrics-endpoint:
@@ -52,7 +64,7 @@ provides:
       Provides application metrics to Prometheus deployment
   grafana-dashboard:
     description: |
-      Forwards dashboards to Grafana deployment 
+      Forwards dashboards to Grafana deployment
     interface: grafana_dashboard
 
 peers:

@@ -8,15 +8,23 @@
 
 import json
 import logging
+import os
+import socket
 from typing import Dict, Optional
 from urllib.parse import urlparse
 
+from charms.certificate_transfer_interface.v0.certificate_transfer import (
+    CertificateAvailableEvent,
+    CertificateRemovedEvent,
+    CertificateTransferRequires,
+)
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.hydra.v0.hydra_endpoints import (
     HydraEndpointsRelationDataMissingError,
     HydraEndpointsRelationMissingError,
     HydraEndpointsRequirer,
 )
+from charms.hydra.v0.oauth import ClientConfig, OAuthInfoChangedEvent, OAuthRequirer
 from charms.kratos.v0.kratos_info import KratosInfoRelationDataMissingError, KratosInfoRequirer
 from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer, PromtailDigestError
 from charms.oathkeeper.v0.oathkeeper_info import (
@@ -52,13 +60,20 @@ from admin_ui_cli import AdminUICLI, CommandOutputParseExceptionError
 from constants import (
     ADMIN_UI_COMMAND,
     ADMIN_UI_PORT,
+    CA_CERT_DIR_PATH,
+    CERTIFICATE_TRANSFER_NAME,
     GRAFANA_DASHBOARD_INTEGRATION_NAME,
     HYDRA_ENDPOINTS_INTEGRATION_NAME,
+    INGRESS_INTEGRATION_NAME,
     KRATOS_INFO_INTEGRATION_NAME,
     LOG_DIR,
     LOG_FILE,
     LOKI_API_PUSH_INTEGRATION_NAME,
     OATHKEEPER_INFO_INTEGRATION_NAME,
+    OAUTH_CALLBACK_PATH,
+    OAUTH_GRANT_TYPES,
+    OAUTH_INTEGRATION_NAME,
+    OAUTH_SCOPES,
     OPENFGA_INTEGRATION_NAME,
     OPENFGA_STORE_NAME,
     PEER,
@@ -90,7 +105,7 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
 
         self.ingress = IngressPerAppRequirer(
             self,
-            relation_name="ingress",
+            relation_name=INGRESS_INTEGRATION_NAME,
             port=ADMIN_UI_PORT,
             strip_prefix=True,
             redirect_https=False,
@@ -131,6 +146,10 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             self, relation_name=GRAFANA_DASHBOARD_INTEGRATION_NAME
         )
 
+        self.oauth = OAuthRequirer(self, self._oauth_client_config, OAUTH_INTEGRATION_NAME)
+
+        self.certificate_transfer = CertificateTransferRequires(self, CERTIFICATE_TRANSFER_NAME)
+
         self.framework.observe(self.on.admin_ui_pebble_ready, self._on_admin_ui_pebble_ready)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.upgrade_charm, self._on_upgrade_charm)
@@ -154,6 +173,16 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         self.framework.observe(
             self.on[OATHKEEPER_INFO_INTEGRATION_NAME].relation_changed,
             self._on_config_changed,
+        )
+
+        self.framework.observe(self.oauth.on.oauth_info_changed, self._on_oauth_info_changed)
+        self.framework.observe(self.oauth.on.oauth_info_removed, self._on_oauth_info_changed)
+
+        self.framework.observe(
+            self.certificate_transfer.on.certificate_available, self._on_certificate_available
+        )
+        self.framework.observe(
+            self.certificate_transfer.on.certificate_removed, self._on_certificate_removed
         )
 
         self.framework.observe(
@@ -193,12 +222,19 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         self._handle_status_update_config(event)
 
     def _on_ingress_ready(self, event: IngressPerAppReadyEvent) -> None:
-        if self.unit.is_leader():
-            logger.info("This app's public ingress URL: %s", event.url)
+        self._handle_status_update_config(event)
 
     def _on_ingress_revoked(self, event: IngressPerAppRevokedEvent) -> None:
-        if self.unit.is_leader():
-            logger.info("This app no longer has ingress")
+        self._handle_status_update_config(event)
+
+    def _on_oauth_info_changed(self, event: OAuthInfoChangedEvent) -> None:
+        self._handle_status_update_config(event)
+
+    def _on_certificate_available(self, event: CertificateAvailableEvent) -> None:
+        self._handle_status_update_config(event)
+
+    def _on_certificate_removed(self, event: CertificateRemovedEvent) -> None:
+        self._handle_status_update_config(event)
 
     def _on_openfga_store_created(self, event: OpenFGAStoreCreateEvent) -> None:
         """Handle openfga store created event."""
@@ -281,12 +317,23 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             self.unit.status = BlockedStatus("Missing required relation with openfga")
             return
 
+        if (
+            self.model.relations[OAUTH_INTEGRATION_NAME]
+            and not self.model.relations[INGRESS_INTEGRATION_NAME]
+        ):
+            self.unit.status = BlockedStatus("Ingress relation is required for oauth")
+            return
+
         self.unit.status = MaintenanceStatus("Configuring the container")
+
+        self.oauth.update_client_config(client_config=self._oauth_client_config)
 
         # Make sure the directory for the logfile exists
         if not self._container.isdir(str(LOG_DIR)):
             self._container.make_dir(path=str(LOG_DIR), make_parents=True)
             logger.info(f"Created directory {LOG_DIR}")
+
+        self._push_ca_certs()
 
         if not (self._get_openfga_store_info() and self._openfga_model_id):
             logger.info("Openfga store and model unavailable, deferring the event")
@@ -398,6 +445,20 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         data = peers.data[self.app].pop(key, "")
         return json.loads(data) if data else {}
 
+    def _push_ca_certs(self) -> None:
+        self._container.push(
+            CA_CERT_DIR_PATH / "ca_certificates.crt", self._trusted_certs_bundle, make_dirs=True
+        )
+
+    @property
+    def _trusted_certs_bundle(self) -> str:
+        bundle = []
+        for relation in self.model.relations.get(self.certificate_transfer.relationship_name, []):
+            for unit in set(relation.units).difference([self.app, self.unit]):
+                if ca := relation.data[unit].get("ca"):
+                    bundle.append(ca)
+        return "\n".join(bundle)
+
     @property
     def _peers(self) -> Optional[Relation]:
         """Fetch the peer relation."""
@@ -435,11 +496,28 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             "RULES_CONFIGMAP_NAMESPACE": oathkeeper_info.get("configmaps_namespace", ""),
             "RULES_CONFIGMAP_FILE_NAME": RULES_CONFIGMAP_FILE_NAME,
             "PORT": str(ADMIN_UI_PORT),
+            "BASE_URL": self._domain_url,
             "TRACING_ENABLED": False,
             "LOG_LEVEL": self._log_level,
             "LOG_FILE": str(LOG_FILE),
             "DEBUG": self._log_level == "DEBUG",
+            "AUTHENTICATION_ENABLED": False,
         }
+
+        if self.oauth.is_client_created():
+            oauth_provider_info = self.oauth.get_provider_info()
+
+            container_env.update({
+                "AUTHENTICATION_ENABLED": True,
+                "OIDC_ISSUER": oauth_provider_info.issuer_url,
+                "OAUTH2_CLIENT_ID": oauth_provider_info.client_id,
+                "OAUTH2_CLIENT_SECRET": oauth_provider_info.client_secret,
+                "OAUTH2_REDIRECT_URI": self._redirect_uri,
+                "OAUTH2_CODEGRANT_SCOPES": OAUTH_SCOPES,
+                "ACCESS_TOKEN_VERIFICATION_STRATEGY": "jwks"
+                if oauth_provider_info.jwt_access_token
+                else "userinfo",
+            })
 
         if self._tracing_ready:
             container_env["TRACING_ENABLED"] = True
@@ -482,6 +560,35 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
     @property
     def _log_level(self) -> str:
         return self.config["log_level"]
+
+    @property
+    def _internal_url(self) -> str:
+        """Return workload's internal URL. Used for ingress."""
+        return f"http://{socket.getfqdn()}:{ADMIN_UI_PORT}"
+
+    @property
+    def _domain_url(self) -> str:
+        return self.ingress.url if self.ingress.is_ready() else self._internal_url
+
+    @property
+    def _redirect_uri(self) -> Optional[str]:
+        return os.path.join(self._domain_url, OAUTH_CALLBACK_PATH)
+
+    @property
+    def _oauth_client_config(self) -> Optional[ClientConfig]:
+        c = ClientConfig(
+            redirect_uri=self._redirect_uri,
+            scope=OAUTH_SCOPES,
+            grant_types=OAUTH_GRANT_TYPES,
+        )
+        # Bootstrap the client config to have the client_id as an aud.
+        # TODO(nsklikas): Remove when the login-ui automatically adds it to the audience
+        # https://github.com/canonical/identity-platform-login-ui/issues/244
+        if hasattr(self, "oauth"):
+            oauth_provider_info = self.oauth.get_provider_info()
+            if oauth_provider_info and oauth_provider_info.client_id:
+                c.audience = [oauth_provider_info.client_id]
+        return c
 
 
 if __name__ == "__main__":  # pragma: nocover

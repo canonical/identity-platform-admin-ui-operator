@@ -5,6 +5,7 @@
 
 import json
 import logging
+import os
 from typing import Dict, Tuple
 from unittest.mock import MagicMock
 
@@ -14,7 +15,7 @@ from ops.pebble import ExecError
 from ops.testing import Harness
 
 from admin_ui_cli import CommandOutputParseExceptionError
-from constants import LOG_DIR, WORKLOAD_CONTAINER_NAME, WORKLOAD_SERVICE_NAME
+from constants import LOG_DIR, OAUTH_CALLBACK_PATH, WORKLOAD_CONTAINER_NAME, WORKLOAD_SERVICE_NAME
 
 
 def setup_peer_relation(harness: Harness) -> Tuple[int, str]:
@@ -98,6 +99,28 @@ def setup_openfga_relation(harness: Harness) -> int:
         },
     )
     return relation_id
+
+
+def setup_oauth_relation(harness: Harness) -> Tuple[int, Dict]:
+    relation_id = harness.add_relation("oauth", "hydra")
+    harness.add_relation_unit(relation_id, "hydra/0")
+    secret_id = harness.add_model_secret("hydra", {"secret": "client_secret"})
+    harness.grant_secret(secret_id, harness.charm.app.name)
+    databag = {
+        "client_id": "client_id",
+        "client_secret_id": secret_id,
+        "authorization_endpoint": "https://example.oidc.com/oauth2/auth",
+        "introspection_endpoint": "https://example.oidc.com/admin/oauth2/introspect",
+        "issuer_url": "https://example.oidc.com",
+        "jwks_endpoint": "https://example.oidc.com/.well-known/jwks.json",
+        "scope": "openid,email,profile,offline_access",
+        "token_endpoint": "https://example.oidc.com/oauth2/token",
+        "userinfo_endpoint": "https://example.oidc.com/userinfo",
+        "jwt_access_token": "True",
+    }
+    harness.update_relation_data(relation_id, "hydra", databag)
+    databag["client_secret"] = "client_secret"
+    return relation_id, databag
 
 
 def setup_loki_relation(harness: Harness) -> int:
@@ -196,6 +219,8 @@ class TestPebbleReadyEvent:
     ) -> None:
         harness.set_can_connect(WORKLOAD_CONTAINER_NAME, True)
         setup_kratos_relation(harness)
+        _, data = setup_oauth_relation(harness)
+        _, url = setup_ingress_relation(harness)
         harness.charm.on.admin_ui_pebble_ready.emit(WORKLOAD_CONTAINER_NAME)
 
         expected_layer = {
@@ -208,7 +233,10 @@ class TestPebbleReadyEvent:
                     "command": "/usr/bin/identity-platform-admin-ui serve",
                     "startup": "enabled",
                     "environment": {
+                        "ACCESS_TOKEN_VERIFICATION_STRATEGY": "jwks",
+                        "AUTHENTICATION_ENABLED": True,
                         "AUTHORIZATION_ENABLED": True,
+                        "BASE_URL": url,
                         "OPENFGA_API_HOST": "127.0.0.1:8080",
                         "OPENFGA_API_SCHEME": "http",
                         "OPENFGA_API_TOKEN": "token",
@@ -222,6 +250,11 @@ class TestPebbleReadyEvent:
                         "SCHEMAS_CONFIGMAP_NAME": "identity-schemas",
                         "SCHEMAS_CONFIGMAP_NAMESPACE": "testing",
                         "OATHKEEPER_PUBLIC_URL": "",
+                        "OAUTH2_CLIENT_ID": data["client_id"],
+                        "OAUTH2_CLIENT_SECRET": data["client_secret"],
+                        "OAUTH2_CODEGRANT_SCOPES": "openid,email,profile,offline_access",
+                        "OAUTH2_REDIRECT_URI": os.path.join(url, "api/v0/auth/callback"),
+                        "OIDC_ISSUER": data["issuer_url"],
                         "RULES_CONFIGMAP_NAME": "",
                         "RULES_CONFIGMAP_NAMESPACE": "",
                         "RULES_CONFIGMAP_FILE_NAME": "admin_ui_rules.json",
@@ -366,6 +399,55 @@ class TestOathkeeperRelation:
         assert pebble_env["RULES_CONFIGMAP_NAMESPACE"] == "testing"
 
 
+class TestOauthRelation:
+    def test_oauth_relation_without_ingress_relation(
+        self, harness: Harness, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        caplog.set_level(logging.INFO)
+        harness.set_can_connect(WORKLOAD_CONTAINER_NAME, True)
+        setup_peer_relation(harness)
+        setup_kratos_relation(harness)
+        setup_hydra_relation(harness)
+        setup_openfga_relation(harness)
+
+        _, _ = setup_oauth_relation(harness)
+
+        assert isinstance(harness.charm.unit.status, BlockedStatus)
+
+    def test_oauth_relation(self, harness: Harness, caplog: pytest.LogCaptureFixture) -> None:
+        caplog.set_level(logging.INFO)
+        harness.set_can_connect(WORKLOAD_CONTAINER_NAME, True)
+        setup_peer_relation(harness)
+        setup_kratos_relation(harness)
+        setup_hydra_relation(harness)
+        setup_openfga_relation(harness)
+
+        oauth_relation_id, _ = setup_oauth_relation(harness)
+        _, url = setup_ingress_relation(harness)
+
+        data = harness.get_relation_data(oauth_relation_id, harness.charm.app)
+
+        assert data["redirect_uri"] == os.path.join(url, OAUTH_CALLBACK_PATH)
+
+    def test_oauth_relation_with_ingress_revoked(
+        self, harness: Harness, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        caplog.set_level(logging.INFO)
+        harness.set_can_connect(WORKLOAD_CONTAINER_NAME, True)
+        setup_peer_relation(harness)
+        setup_kratos_relation(harness)
+        setup_hydra_relation(harness)
+        setup_openfga_relation(harness)
+
+        oauth_relation_id, _ = setup_oauth_relation(harness)
+        relation_id, _ = setup_ingress_relation(harness)
+
+        _ = harness.get_relation_data(oauth_relation_id, harness.charm.app)
+        harness.remove_relation(relation_id)
+
+        assert isinstance(harness.charm.unit.status, BlockedStatus)
+
+
 class TestIngressRelation:
     def test_ingress_relation_created(self, harness: Harness) -> None:
         harness.set_can_connect(WORKLOAD_CONTAINER_NAME, True)
@@ -382,18 +464,6 @@ class TestIngressRelation:
             "strip-prefix": json.dumps(True),
             "redirect-https": json.dumps(False),
         }
-
-    def test_ingress_relation_revoked(
-        self, harness: Harness, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        caplog.set_level(logging.INFO)
-        harness.set_can_connect(WORKLOAD_CONTAINER_NAME, True)
-
-        relation_id, _ = setup_ingress_relation(harness)
-        caplog.clear()
-        harness.remove_relation(relation_id)
-
-        assert "This app no longer has ingress" in caplog.record_tuples[2]
 
 
 class TestOpenFGARelation:

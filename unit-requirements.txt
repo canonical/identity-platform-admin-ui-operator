@@ -1,3 +1,4 @@
+ipdb
 pytest
 pytest-mock
 coverage[toml]

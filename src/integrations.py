@@ -4,17 +4,26 @@
 import json
 import logging
 from dataclasses import dataclass
-from typing import Any, Mapping
-from urllib.parse import urlparse
+from typing import Any, Mapping, Optional
+from urllib.parse import urljoin, urlparse
 
 from charms.hydra.v0.hydra_endpoints import HydraEndpointsRequirer
+from charms.hydra.v0.oauth import ClientConfig, OAuthRequirer
 from charms.kratos.v0.kratos_info import KratosInfoRequirer
 from charms.oathkeeper.v0.oathkeeper_info import OathkeeperInfoRequirer
 from charms.openfga_k8s.v1.openfga import OpenFGARequires
 from charms.tempo_k8s.v0.tracing import TracingEndpointRequirer
+from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 from ops.model import Model
 
-from constants import PEER_INTEGRATION_NAME
+from constants import (
+    DEFAULT_ACCESS_TOKEN_VERIFICATION_STRATEGY,
+    DEFAULT_BASE_URL,
+    OAUTH_CALLBACK_PATH,
+    OAUTH_GRANT_TYPES,
+    OAUTH_SCOPES,
+    PEER_INTEGRATION_NAME,
+)
 from env_vars import EnvVars
 
 logger = logging.getLogger(__name__)
@@ -231,3 +240,94 @@ class TracingIntegration:
             http_endpoint=self._requirer.otlp_http_endpoint(),  # type: ignore[arg-type]
             grpc_endpoint=self._requirer.otlp_grpc_endpoint(),  # type: ignore[arg-type]
         )
+
+
+@dataclass(frozen=True)
+class IngressData:
+    is_ready: bool = False
+    url: str = DEFAULT_BASE_URL
+
+    def to_env_vars(self) -> EnvVars:
+        return {
+            "BASE_URL": self.url,
+            "OAUTH2_REDIRECT_URI": urljoin(self.url, OAUTH_CALLBACK_PATH),
+        }
+
+
+class IngressIntegration:
+    def __init__(self, requirer: IngressPerAppRequirer) -> None:
+        self._requirer = requirer
+
+    @property
+    def ingress_data(self) -> IngressData:
+        if not (is_ready := self._requirer.is_ready()):
+            return IngressData()
+
+        return IngressData(is_ready=is_ready, url=self._requirer.url)  # type: ignore[arg-type]
+
+
+@dataclass(frozen=True)
+class OAuthProviderData:
+    auth_enabled: bool = False
+    oidc_issuer_url: str = ""
+    client_id: str = ""
+    client_secret: str = ""
+    access_token_verification_strategy: str = DEFAULT_ACCESS_TOKEN_VERIFICATION_STRATEGY
+
+    def to_env_vars(self) -> EnvVars:
+        return {
+            "AUTHENTICATION_ENABLED": self.auth_enabled,
+            "OIDC_ISSUER": self.oidc_issuer_url,
+            "OAUTH2_CLIENT_ID": self.client_id,
+            "OAUTH2_CLIENT_SECRET": self.client_secret,
+            "OAUTH2_CODEGRANT_SCOPES": OAUTH_SCOPES,
+            "ACCESS_TOKEN_VERIFICATION_STRATEGY": self.access_token_verification_strategy,
+        }
+
+
+class OAuthIntegration:
+    def __init__(self, requirer: OAuthRequirer) -> None:
+        self._requirer = requirer
+
+    @property
+    def oauth_provider_data(self) -> OAuthProviderData:
+        if not (auth_enabled := self._requirer.is_client_created()):
+            return OAuthProviderData()
+
+        oauth_provider_info = self._requirer.get_provider_info()
+        return OAuthProviderData(
+            auth_enabled=auth_enabled,
+            oidc_issuer_url=oauth_provider_info.issuer_url,  # type: ignore[union-attr]
+            client_id=oauth_provider_info.client_id,  # type: ignore
+            client_secret=oauth_provider_info.client_secret,  # type: ignore
+            access_token_verification_strategy="jwks"
+            if oauth_provider_info.jwt_access_token  # type: ignore[union-attr]
+            else DEFAULT_ACCESS_TOKEN_VERIFICATION_STRATEGY,
+        )
+
+    def update_oauth_client_config(self, ingress_url: str) -> None:
+        client_config = load_oauth_client_config(ingress_url, self._requirer)
+        self._requirer.update_client_config(client_config)
+
+
+def load_oauth_client_config(
+    ingress_url: str,
+    oauth_requirer: Optional[OAuthRequirer] = None,
+) -> ClientConfig:
+    client = ClientConfig(
+        redirect_uri=urljoin(ingress_url, OAUTH_CALLBACK_PATH),
+        scope=OAUTH_SCOPES,
+        grant_types=OAUTH_GRANT_TYPES,
+    )
+
+    # Bootstrap the client config to have the client_id as an aud.
+    # TODO(nsklikas): Remove when the login-ui automatically adds it to the audience
+    # https://github.com/canonical/identity-platform-login-ui/issues/244
+    if not oauth_requirer:
+        return client
+
+    oauth_provider_data = oauth_requirer.get_provider_info()
+    if oauth_provider_data and oauth_provider_data.client_id:
+        client.audience = [oauth_provider_data.client_id]
+
+    return client

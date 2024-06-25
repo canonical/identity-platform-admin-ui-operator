@@ -76,6 +76,7 @@ async def test_build_and_deploy(
     await ops_test.model.integrate(ADMIN_SERVICE_APP, OPENFGA_APP)
     await ops_test.model.integrate(f"{ADMIN_SERVICE_APP}:oathkeeper-info", OATHKEEPER_APP)
     await ops_test.model.integrate(ADMIN_SERVICE_APP, public_traefik_app_name)
+    await ops_test.model.integrate(f"{ADMIN_SERVICE_APP}:oauth", hydra_app_name)
 
     await ops_test.model.wait_for_idle(
         status="active",
@@ -113,6 +114,11 @@ def test_ingress_integration(
 
     data = json.loads(leader_ingress_integration_data["ingress"])
     assert f"{ops_test.model_name}-{ADMIN_SERVICE_APP}" in data["url"]
+
+
+def test_oauth_integration(leader_oauth_integration_data: Optional[dict]) -> None:
+    assert leader_oauth_integration_data
+    assert all(leader_oauth_integration_data.values())
 
 
 def test_peer_integration(

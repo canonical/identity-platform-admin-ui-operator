@@ -27,7 +27,7 @@ profile = "black"
 # Settings: https://docs.astral.sh/ruff/settings/
 line-length = 99
 include = ["pyproject.toml", "src/**/*.py", "tests/**/*.py"]
-extend-exclude = ["__pycache__", "*.egg_info"]
+extend-exclude = ["__pycache__", "*.egg_info", "lib"]
 target-version = "py38"
 preview = true
 

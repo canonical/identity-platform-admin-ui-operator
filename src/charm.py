@@ -11,6 +11,7 @@ from typing import Any
 
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.hydra.v0.hydra_endpoints import HydraEndpointsRequirer
+from charms.hydra.v0.oauth import OAuthInfoChangedEvent, OAuthRequirer
 from charms.kratos.v0.kratos_info import KratosInfoRequirer
 from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer, PromtailDigestError
 from charms.oathkeeper.v0.oathkeeper_info import OathkeeperInfoRequirer
@@ -43,11 +44,13 @@ from constants import (
     ADMIN_SERVICE_PORT,
     GRAFANA_DASHBOARD_INTEGRATION_NAME,
     HYDRA_ENDPOINTS_INTEGRATION_NAME,
+    INGRESS_INTEGRATION_NAME,
     KRATOS_INFO_INTEGRATION_NAME,
     LOG_DIR,
     LOG_FILE,
     LOKI_API_PUSH_INTEGRATION_NAME,
     OATHKEEPER_INFO_INTEGRATION_NAME,
+    OAUTH_INTEGRATION_NAME,
     OPENFGA_INTEGRATION_NAME,
     OPENFGA_STORE_NAME,
     PEER_INTEGRATION_NAME,
@@ -58,12 +61,15 @@ from constants import (
 from exceptions import PebbleError
 from integrations import (
     HydraIntegration,
+    IngressIntegration,
     KratosIntegration,
     OathkeeperIntegration,
+    OAuthIntegration,
     OpenFGAIntegration,
     OpenFGAModelData,
     PeerData,
     TracingIntegration,
+    load_oauth_client_config,
 )
 from services import PebbleService, WorkloadService
 from utils import (
@@ -107,19 +113,24 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         )
         self.openfga_integration = OpenFGAIntegration(self.openfga_requirer)
 
+        self.ingress_requirer = IngressPerAppRequirer(
+            self,
+            relation_name=INGRESS_INTEGRATION_NAME,
+            port=ADMIN_SERVICE_PORT,
+            strip_prefix=True,
+            redirect_https=False,
+        )
+        self.ingress_integration = IngressIntegration(self.ingress_requirer)
+
+        oauth_client_config = load_oauth_client_config(self.ingress_integration.ingress_data.url)
+        self.oauth_requirer = OAuthRequirer(self, oauth_client_config, OAUTH_INTEGRATION_NAME)
+        self.oauth_integration = OAuthIntegration(self.oauth_requirer)
+
         self.tracing = TracingEndpointRequirer(
             self,
             relation_name=TEMPO_TRACING_INTEGRATION_NAME,
         )
         self.tracing_integration = TracingIntegration(self.tracing)
-
-        self.ingress = IngressPerAppRequirer(
-            self,
-            relation_name="ingress",
-            port=ADMIN_SERVICE_PORT,
-            strip_prefix=True,
-            redirect_https=False,
-        )
 
         self.metrics_endpoint = MetricsEndpointProvider(
             self,
@@ -152,8 +163,8 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             self.on.identity_platform_admin_ui_relation_changed, self._on_peer_relation_changed
         )
 
-        self.framework.observe(self.ingress.on.ready, self._on_ingress_ready)
-        self.framework.observe(self.ingress.on.revoked, self._on_ingress_revoked)
+        self.framework.observe(self.ingress_requirer.on.ready, self._on_ingress_changed)
+        self.framework.observe(self.ingress_requirer.on.revoked, self._on_ingress_changed)
         self.framework.observe(
             self.openfga_requirer.on.openfga_store_created,
             self._on_openfga_store_created,
@@ -174,6 +185,15 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             self.on[OATHKEEPER_INFO_INTEGRATION_NAME].relation_changed,
             self._on_config_changed,
         )
+        self.framework.observe(
+            self.oauth_requirer.on.oauth_info_changed,
+            self._on_oauth_info_changed,
+        )
+        self.framework.observe(
+            self.oauth_requirer.on.oauth_info_removed,
+            self._on_oauth_info_changed,
+        )
+
         self.framework.observe(
             self.loki_consumer.on.promtail_digest_error,
             self._promtail_error,
@@ -196,6 +216,33 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         container_not_connected,
         integration_not_exists(PEER_INTEGRATION_NAME),
     )
+    @leader_unit
+    def _on_upgrade_charm(self, event: UpgradeCharmEvent) -> None:
+        if not self.openfga_integration.is_store_ready():
+            return
+
+        openfga_model_id = self._workload_service.create_openfga_model(
+            self.openfga_integration.openfga_integration_data
+        )
+        self.peer_data[self._workload_service.version] = {"openfga_model_id": openfga_model_id}
+
+    @leader_unit
+    def _on_ingress_changed(
+        self, event: IngressPerAppReadyEvent | IngressPerAppRevokedEvent
+    ) -> None:
+        ingress_data = self.ingress_integration.ingress_data
+        self.oauth_integration.update_oauth_client_config(ingress_url=ingress_data.url)
+        self._handle_status_update_config(event)
+
+    def _on_oauth_info_changed(self, event: OAuthInfoChangedEvent) -> None:
+        ingress_data = self.ingress_integration.ingress_data
+        self.oauth_integration.update_oauth_client_config(ingress_data.url)
+        self._handle_status_update_config(event)
+
+    @wait_when(
+        container_not_connected,
+        integration_not_exists(PEER_INTEGRATION_NAME),
+    )
     def _on_openfga_store_created(self, event: OpenFGAStoreCreateEvent) -> None:
         if not self.openfga_integration.is_store_ready():
             event.defer()
@@ -210,28 +257,16 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         self._handle_status_update_config(event)
 
     def _on_openfga_store_removed(self, event: OpenFGAStoreRemovedEvent) -> None:
-        # TODO: need to check if leader unit is a must
-        self.peer_data.pop(key=self._workload_service.version)
+        if self.unit.is_leader():
+            self.peer_data.pop(key=self._workload_service.version)
+
         self._handle_status_update_config(event)
-
-    @wait_when(
-        container_not_connected,
-        integration_not_exists(PEER_INTEGRATION_NAME),
-    )
-    @leader_unit
-    def _on_upgrade_charm(self, event: UpgradeCharmEvent) -> None:
-        if not self.openfga_integration.is_store_ready():
-            return
-
-        openfga_model_id = self._workload_service.create_openfga_model(
-            self.openfga_integration.openfga_integration_data
-        )
-        self.peer_data[self._workload_service.version] = {"openfga_model_id": openfga_model_id}
 
     @block_when(
         integration_not_exists(KRATOS_INFO_INTEGRATION_NAME),
         integration_not_exists(HYDRA_ENDPOINTS_INTEGRATION_NAME),
         integration_not_exists(OPENFGA_INTEGRATION_NAME),
+        integration_not_exists(INGRESS_INTEGRATION_NAME),
     )
     @wait_when(
         container_not_connected,
@@ -266,14 +301,18 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         openfga_model_data = OpenFGAModelData.load(self.peer_data[self._workload_service.version])
         kratos_data = self.kratos_integration.kratos_data
         hydra_data = self.hydra_integration.hydra_data
+        ingress_data = self.ingress_integration.ingress_data
         oathkeeper_data = self.oathkeeper_integration.oathkeeper_data
+        oauth_data = self.oauth_integration.oauth_provider_data
         tracing_data = self.tracing_integration.tracing_data
         charm_config = CharmConfig(self.config)
 
         return self._pebble_service.render_pebble_layer(
             kratos_data,
             hydra_data,
+            ingress_data,
             oathkeeper_data,
+            oauth_data,
             openfga_integration_data,
             openfga_model_data,
             tracing_data,
@@ -282,14 +321,6 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
 
     def _promtail_error(self, event: PromtailDigestError) -> None:
         logger.error(event.message)
-
-    @leader_unit
-    def _on_ingress_ready(self, event: IngressPerAppReadyEvent) -> None:
-        logger.info("This app's public ingress URL: %s", event.url)
-
-    @leader_unit
-    def _on_ingress_revoked(self, event: IngressPerAppRevokedEvent) -> None:
-        logger.info("This app no longer has ingress")
 
 
 if __name__ == "__main__":

@@ -96,6 +96,11 @@ def leader_peer_integration_data(app_integration_data: Callable) -> Optional[dic
 
 
 @pytest.fixture
+def leader_oauth_integration_data(app_integration_data: Callable) -> Optional[dict]:
+    return app_integration_data(ADMIN_SERVICE_APP, "oauth")
+
+
+@pytest.fixture
 def admin_service_application(ops_test: OpsTest) -> Application:
     return ops_test.model.applications[ADMIN_SERVICE_APP]
 

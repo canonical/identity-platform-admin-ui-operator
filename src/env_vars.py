@@ -3,11 +3,12 @@
 
 from typing import Mapping, Protocol, TypeAlias, Union
 
-from constants import ADMIN_SERVICE_PORT, LOG_FILE
+from constants import ADMIN_SERVICE_PORT, DEFAULT_BASE_URL, LOG_FILE
 
 EnvVars: TypeAlias = Mapping[str, Union[str, bool]]
 
 DEFAULT_CONTAINER_ENV = {
+    "AUTHENTICATION_ENABLED": False,
     "AUTHORIZATION_ENABLED": True,
     "OPENFGA_AUTHORIZATION_MODEL_ID": "",
     "OPENFGA_STORE_ID": "",
@@ -26,6 +27,7 @@ DEFAULT_CONTAINER_ENV = {
     "RULES_CONFIGMAP_NAMESPACE": "",
     "RULES_CONFIGMAP_FILE_NAME": "",
     "PORT": str(ADMIN_SERVICE_PORT),
+    "BASE_URL": DEFAULT_BASE_URL,
     "TRACING_ENABLED": False,
     "OTEL_HTTP_ENDPOINT": "",
     "OTEL_GRPC_ENDPOINT": "",
@@ -36,4 +38,5 @@ DEFAULT_CONTAINER_ENV = {
 
 
 class EnvVarConvertible(Protocol):
-    def to_env_vars(self) -> EnvVars: ...
+    def to_env_vars(self) -> EnvVars:
+        pass

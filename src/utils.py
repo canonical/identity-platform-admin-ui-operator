@@ -38,7 +38,6 @@ def block_when(*conditions: Condition) -> Callable[[CharmEventHandler], CharmEve
             for condition in conditions:
                 not_met, msg = condition(charm)
                 if not_met:
-                    event.defer()
                     charm.unit.status = BlockedStatus(msg)
                     return None
 

@@ -13,6 +13,7 @@ WORKLOAD_SERVICE = "admin-ui"
 # Application constants
 ADMIN_SERVICE_COMMAND = "/usr/bin/identity-platform-admin-ui serve"
 ADMIN_SERVICE_PORT = 8080
+CA_CERT_DIR_PATH = PurePath("/etc/ssl/certs/")
 DEFAULT_BASE_URL = f"http://{socket.getfqdn()}:{ADMIN_SERVICE_PORT}"
 LOG_DIR = PurePath("/var/log")
 LOG_FILE = LOG_DIR / "admin_ui.log"
@@ -34,4 +35,5 @@ OPENFGA_INTEGRATION_NAME = "openfga"
 OPENFGA_STORE_NAME = "identity-platform-admin-ui-store"
 OAUTH_INTEGRATION_NAME = "oauth"
 INGRESS_INTEGRATION_NAME = "ingress"
+CERTIFICATE_TRANSFER_INTEGRATION_NAME = "receive-ca-cert"
 PEER_INTEGRATION_NAME = "identity-platform-admin-ui"

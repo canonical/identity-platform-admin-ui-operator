@@ -9,6 +9,11 @@
 import logging
 from typing import Any
 
+from charms.certificate_transfer_interface.v0.certificate_transfer import (
+    CertificateAvailableEvent,
+    CertificateRemovedEvent,
+    CertificateTransferRequires,
+)
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.hydra.v0.hydra_endpoints import HydraEndpointsRequirer
 from charms.hydra.v0.oauth import OAuthInfoChangedEvent, OAuthRequirer
@@ -42,6 +47,7 @@ from ops.pebble import Layer
 from configs import CharmConfig
 from constants import (
     ADMIN_SERVICE_PORT,
+    CERTIFICATE_TRANSFER_INTEGRATION_NAME,
     GRAFANA_DASHBOARD_INTEGRATION_NAME,
     HYDRA_ENDPOINTS_INTEGRATION_NAME,
     INGRESS_INTEGRATION_NAME,
@@ -126,6 +132,10 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         self.oauth_requirer = OAuthRequirer(self, oauth_client_config, OAUTH_INTEGRATION_NAME)
         self.oauth_integration = OAuthIntegration(self.oauth_requirer)
 
+        self.certificate_transfer_requirer = CertificateTransferRequires(
+            self, CERTIFICATE_TRANSFER_INTEGRATION_NAME
+        )
+
         self.tracing = TracingEndpointRequirer(
             self,
             relation_name=TEMPO_TRACING_INTEGRATION_NAME,
@@ -193,11 +203,29 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             self.oauth_requirer.on.oauth_info_removed,
             self._on_oauth_info_changed,
         )
+        self.framework.observe(
+            self.certificate_transfer_requirer.on.certificate_available,
+            self._on_certificate_available,
+        )
+        self.framework.observe(
+            self.certificate_transfer_requirer.on.certificate_removed,
+            self._on_certificate_removed,
+        )
 
         self.framework.observe(
             self.loki_consumer.on.promtail_digest_error,
             self._promtail_error,
         )
+
+    @wait_when(container_not_connected)
+    def _on_certificate_available(self, event: CertificateAvailableEvent) -> None:
+        self._workload_service.push_ca_certs(event.ca)
+        self._handle_status_update_config(event)
+
+    @wait_when(container_not_connected)
+    def _on_certificate_removed(self, event: CertificateRemovedEvent) -> None:
+        self._workload_service.remove_ca_certs()
+        self._handle_status_update_config(event)
 
     def _on_admin_ui_pebble_ready(self, event: WorkloadEvent) -> None:
         self._workload_service.open_port()
@@ -273,6 +301,14 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         integration_not_exists(PEER_INTEGRATION_NAME),
     )
     def _handle_status_update_config(self, event: HookEvent) -> None:
+        if self.oauth_integration.is_ready() and (
+            not self.model.relations[CERTIFICATE_TRANSFER_INTEGRATION_NAME]
+        ):
+            self.unit.status = BlockedStatus(
+                "Missing certificate_transfer integration with oauth provider"
+            )
+            return
+
         self.unit.status = MaintenanceStatus("Configuring the Admin Service container")
 
         self._workload_service.prepare_dir(path=LOG_DIR)
@@ -288,7 +324,7 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             return
 
         try:
-            self._pebble_service.plan(self._admin_ui_pebble_layer)
+            self._pebble_service.plan(self._pebble_layer)
         except PebbleError:
             self.unit.status = BlockedStatus("Failed to plan pebble layer, please check the logs")
             return
@@ -296,7 +332,7 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         self.unit.status = ActiveStatus()
 
     @property
-    def _admin_ui_pebble_layer(self) -> Layer:
+    def _pebble_layer(self) -> Layer:
         openfga_integration_data = self.openfga_integration.openfga_integration_data
         openfga_model_data = OpenFGAModelData.load(self.peer_data[self._workload_service.version])
         kratos_data = self.kratos_integration.kratos_data

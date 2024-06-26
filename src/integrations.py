@@ -289,6 +289,9 @@ class OAuthIntegration:
     def __init__(self, requirer: OAuthRequirer) -> None:
         self._requirer = requirer
 
+    def is_ready(self) -> bool:
+        return True if self._requirer.get_provider_info() else False
+
     @property
     def oauth_provider_data(self) -> OAuthProviderData:
         if not (auth_enabled := self._requirer.is_client_created()):

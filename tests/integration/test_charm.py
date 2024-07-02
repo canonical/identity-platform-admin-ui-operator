@@ -30,6 +30,7 @@ async def test_build_and_deploy(
     hydra_app_name: str,
     kratos_app_name: str,
     public_traefik_app_name: str,
+    self_signed_certificates_app_name: str,
     ext_idp_service: ExternalIdpService,
 ) -> None:
     charm_file = await ops_test.build_charm(".")
@@ -77,6 +78,7 @@ async def test_build_and_deploy(
     await ops_test.model.integrate(f"{ADMIN_SERVICE_APP}:oathkeeper-info", OATHKEEPER_APP)
     await ops_test.model.integrate(ADMIN_SERVICE_APP, public_traefik_app_name)
     await ops_test.model.integrate(f"{ADMIN_SERVICE_APP}:oauth", hydra_app_name)
+    await ops_test.model.integrate(ADMIN_SERVICE_APP, self_signed_certificates_app_name)
 
     await ops_test.model.wait_for_idle(
         status="active",

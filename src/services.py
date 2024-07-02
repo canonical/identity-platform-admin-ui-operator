@@ -7,7 +7,7 @@ from contextlib import suppress
 from pathlib import PurePath
 
 from ops.model import Container, Unit
-from ops.pebble import ChangeError, Layer, LayerDict, PathError
+from ops.pebble import Layer, LayerDict, PathError
 
 from cli import CommandLine
 from constants import (
@@ -112,8 +112,8 @@ class PebbleService:
 
         try:
             self._container.replan()
-        except ChangeError:
-            raise PebbleError("pebble plan failed.")
+        except Exception as e:
+            raise PebbleError(f"Pebble plan failed. Error: {e}")
 
     def render_pebble_layer(self, *env_var_sources: EnvVarConvertible) -> Layer:
         updated_env_vars = ChainMap(*(source.to_env_vars() for source in env_var_sources))  # type: ignore

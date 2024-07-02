@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2023 Canonical Ltd.
+# Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 #
 # Learn more at: https://juju.is/docs/sdk
@@ -254,17 +254,20 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         )
         self.peer_data[self._workload_service.version] = {"openfga_model_id": openfga_model_id}
 
-    @leader_unit
     def _on_ingress_changed(
         self, event: IngressPerAppReadyEvent | IngressPerAppRevokedEvent
     ) -> None:
-        ingress_data = self.ingress_integration.ingress_data
-        self.oauth_integration.update_oauth_client_config(ingress_url=ingress_data.url)
+        if self.unit.is_leader():
+            ingress_data = self.ingress_integration.ingress_data
+            self.oauth_integration.update_oauth_client_config(ingress_url=ingress_data.url)
+
         self._handle_status_update_config(event)
 
     def _on_oauth_info_changed(self, event: OAuthInfoChangedEvent) -> None:
-        ingress_data = self.ingress_integration.ingress_data
-        self.oauth_integration.update_oauth_client_config(ingress_data.url)
+        if self.unit.is_leader():
+            ingress_data = self.ingress_integration.ingress_data
+            self.oauth_integration.update_oauth_client_config(ingress_data.url)
+
         self._handle_status_update_config(event)
 
     @wait_when(
@@ -290,15 +293,15 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
 
         self._handle_status_update_config(event)
 
+    @wait_when(
+        container_not_connected,
+        integration_not_exists(PEER_INTEGRATION_NAME),
+    )
     @block_when(
         integration_not_exists(KRATOS_INFO_INTEGRATION_NAME),
         integration_not_exists(HYDRA_ENDPOINTS_INTEGRATION_NAME),
         integration_not_exists(OPENFGA_INTEGRATION_NAME),
         integration_not_exists(INGRESS_INTEGRATION_NAME),
-    )
-    @wait_when(
-        container_not_connected,
-        integration_not_exists(PEER_INTEGRATION_NAME),
     )
     def _handle_status_update_config(self, event: HookEvent) -> None:
         if self.oauth_integration.is_ready() and (

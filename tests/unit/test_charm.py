@@ -414,7 +414,12 @@ class TestOauthRelation:
 
         assert isinstance(harness.charm.unit.status, BlockedStatus)
 
-    def test_oauth_relation(self, harness: Harness, caplog: pytest.LogCaptureFixture) -> None:
+    def test_oauth_relation(
+        self,
+        harness: Harness,
+        caplog: pytest.LogCaptureFixture,
+        mocked_validate_cert_trust: MagicMock,
+    ) -> None:
         caplog.set_level(logging.INFO)
         harness.set_can_connect(WORKLOAD_CONTAINER_NAME, True)
         setup_peer_relation(harness)
@@ -429,8 +434,30 @@ class TestOauthRelation:
 
         assert data["redirect_uri"] == os.path.join(url, OAUTH_CALLBACK_PATH)
 
+    def test_oauth_relation_without_cert_trust(
+        self,
+        harness: Harness,
+        caplog: pytest.LogCaptureFixture,
+        mocked_validate_cert_trust: MagicMock,
+    ) -> None:
+        caplog.set_level(logging.INFO)
+        harness.set_can_connect(WORKLOAD_CONTAINER_NAME, True)
+        mocked_validate_cert_trust.return_value = False
+
+        setup_peer_relation(harness)
+        setup_kratos_relation(harness)
+        setup_hydra_relation(harness)
+        setup_openfga_relation(harness)
+        setup_oauth_relation(harness)
+        setup_ingress_relation(harness)
+
+        assert isinstance(harness.charm.unit.status, BlockedStatus)
+
     def test_oauth_relation_with_ingress_revoked(
-        self, harness: Harness, caplog: pytest.LogCaptureFixture
+        self,
+        harness: Harness,
+        caplog: pytest.LogCaptureFixture,
+        mocked_validate_cert_trust: MagicMock,
     ) -> None:
         caplog.set_level(logging.INFO)
         harness.set_can_connect(WORKLOAD_CONTAINER_NAME, True)

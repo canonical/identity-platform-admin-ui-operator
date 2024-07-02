@@ -66,6 +66,13 @@ def mocked_handle_status_update_config(mocker: MockerFixture) -> MagicMock:
 
 
 @pytest.fixture()
+def mocked_validate_cert_trust(mocker: MockerFixture) -> Generator[MagicMock, None, None]:
+    mock = mocker.patch("charm.IdentityPlatformAdminUIOperatorCharm._validate_cert_trust")
+    mock.return_value = True
+    yield mock
+
+
+@pytest.fixture()
 def openfga_requirer_databag() -> Dict:
     return {"store_name": OPENFGA_STORE_NAME}
 

@@ -113,9 +113,11 @@ def admin_service_version() -> str:
 
 @asynccontextmanager
 async def remove_integration(
-    ops_test: OpsTest, remote_app_name: str
+    ops_test: OpsTest, remote_app_name: str, integration_name: str
 ) -> AsyncGenerator[None, None]:
-    remove_integration_cmd = (f"remove-relation {ADMIN_SERVICE_APP} {remote_app_name}").split()
+    remove_integration_cmd = (
+        f"remove-relation {ADMIN_SERVICE_APP}:{integration_name} {remote_app_name}"
+    ).split()
     await ops_test.juju(*remove_integration_cmd)
     await ops_test.model.wait_for_idle(
         apps=[remote_app_name],
@@ -125,7 +127,7 @@ async def remove_integration(
     try:
         yield
     finally:
-        await ops_test.model.integrate(ADMIN_SERVICE_APP, remote_app_name)
+        await ops_test.model.integrate(f"{ADMIN_SERVICE_APP}:{integration_name}", remote_app_name)
         await ops_test.model.wait_for_idle(
             apps=[ADMIN_SERVICE_APP, remote_app_name],
             status="active",

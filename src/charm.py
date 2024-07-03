@@ -32,10 +32,10 @@ from charms.traefik_k8s.v2.ingress import (
     IngressPerAppRequirer,
     IngressPerAppRevokedEvent,
 )
+from ops import EventBase
 from ops.charm import (
     CharmBase,
     ConfigChangedEvent,
-    HookEvent,
     RelationChangedEvent,
     UpgradeCharmEvent,
     WorkloadEvent,
@@ -188,7 +188,15 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             self._on_config_changed,
         )
         self.framework.observe(
+            self.on[HYDRA_ENDPOINTS_INTEGRATION_NAME].relation_broken,
+            self._on_config_changed,
+        )
+        self.framework.observe(
             self.on[KRATOS_INFO_INTEGRATION_NAME].relation_changed,
+            self._on_config_changed,
+        )
+        self.framework.observe(
+            self.on[KRATOS_INFO_INTEGRATION_NAME].relation_broken,
             self._on_config_changed,
         )
         self.framework.observe(
@@ -216,16 +224,6 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             self.loki_consumer.on.promtail_digest_error,
             self._promtail_error,
         )
-
-    @wait_when(container_not_connected)
-    def _on_certificate_available(self, event: CertificateAvailableEvent) -> None:
-        self._workload_service.push_ca_certs(event.ca)
-        self._handle_status_update_config(event)
-
-    @wait_when(container_not_connected)
-    def _on_certificate_removed(self, event: CertificateRemovedEvent) -> None:
-        self._workload_service.remove_ca_certs()
-        self._handle_status_update_config(event)
 
     def _on_admin_ui_pebble_ready(self, event: WorkloadEvent) -> None:
         self._workload_service.open_port()
@@ -293,6 +291,16 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
 
         self._handle_status_update_config(event)
 
+    @wait_when(container_not_connected)
+    def _on_certificate_available(self, event: CertificateAvailableEvent) -> None:
+        self._workload_service.push_ca_certs(event.ca)
+        self._handle_status_update_config(event)
+
+    @wait_when(container_not_connected)
+    def _on_certificate_removed(self, event: CertificateRemovedEvent) -> None:
+        self._workload_service.remove_ca_certs()
+        self._handle_status_update_config(event)
+
     @wait_when(
         container_not_connected,
         integration_not_exists(PEER_INTEGRATION_NAME),
@@ -303,7 +311,7 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         integration_not_exists(OPENFGA_INTEGRATION_NAME),
         integration_not_exists(INGRESS_INTEGRATION_NAME),
     )
-    def _handle_status_update_config(self, event: HookEvent) -> None:
+    def _handle_status_update_config(self, event: EventBase) -> None:
         if self.oauth_integration.is_ready() and (
             not self.model.relations[CERTIFICATE_TRANSFER_INTEGRATION_NAME]
         ):

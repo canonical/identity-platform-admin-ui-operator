@@ -19,6 +19,13 @@ from juju.application import Application
 from oauth_tools import ExternalIdpService, deploy_identity_bundle
 from pytest_operator.plugin import OpsTest
 
+from constants import (
+    HYDRA_ENDPOINTS_INTEGRATION_NAME,
+    INGRESS_INTEGRATION_NAME,
+    KRATOS_INFO_INTEGRATION_NAME,
+    OPENFGA_INTEGRATION_NAME,
+)
+
 pytest_plugins = ["oauth_tools.fixtures"]
 logger = logging.getLogger(__name__)
 
@@ -182,39 +189,36 @@ async def test_scale_down(
     assert leader_openfga_integration_data
 
 
-async def test_remove_integration_with_openfga(
+async def test_remove_integration_openfga(
     ops_test: OpsTest,
     admin_service_application: Application,
 ) -> None:
-    async with remove_integration(ops_test, OPENFGA_APP):
+    async with remove_integration(ops_test, OPENFGA_APP, OPENFGA_INTEGRATION_NAME):
         assert "blocked" == admin_service_application.status
 
 
-@pytest.mark.xfail(reason="not implemented yet")
-async def test_remove_integration_with_kratos(
+async def test_remove_integration_kratos_info(
     ops_test: OpsTest,
     kratos_app_name: str,
     admin_service_application: Application,
 ) -> None:
-    async with remove_integration(ops_test, kratos_app_name):
+    async with remove_integration(ops_test, kratos_app_name, KRATOS_INFO_INTEGRATION_NAME):
         assert "blocked" == admin_service_application.status
 
 
-@pytest.mark.xfail(reason="not implemented yet")
-async def test_remove_integration_with_hydra(
+async def test_remove_integration_hydra_endpoint_info(
     ops_test: OpsTest,
     hydra_app_name: str,
     admin_service_application: Application,
 ) -> None:
-    async with remove_integration(ops_test, hydra_app_name):
+    async with remove_integration(ops_test, hydra_app_name, HYDRA_ENDPOINTS_INTEGRATION_NAME):
         assert "blocked" == admin_service_application.status
 
 
-@pytest.mark.xfail(reason="not implemented yet")
-async def test_remove_integration_with_ingress(
+async def test_remove_integration_ingress(
     ops_test: OpsTest,
     public_traefik_app_name: str,
     admin_service_application: Application,
 ) -> None:
-    async with remove_integration(ops_test, public_traefik_app_name):
+    async with remove_integration(ops_test, public_traefik_app_name, INGRESS_INTEGRATION_NAME):
         assert "blocked" == admin_service_application.status

@@ -66,15 +66,15 @@ from constants import (
 )
 from exceptions import PebbleError
 from integrations import (
-    HydraIntegration,
-    IngressIntegration,
-    KratosIntegration,
-    OathkeeperIntegration,
+    HydraData,
+    IngressData,
+    KratosData,
+    OathkeeperData,
     OAuthIntegration,
     OpenFGAIntegration,
     OpenFGAModelData,
     PeerData,
-    TracingIntegration,
+    TracingData,
     load_oauth_client_config,
 )
 from services import PebbleService, WorkloadService
@@ -102,17 +102,14 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         self.hydra_endpoints_requirer = HydraEndpointsRequirer(
             self, relation_name=HYDRA_ENDPOINTS_INTEGRATION_NAME
         )
-        self.hydra_integration = HydraIntegration(self.hydra_endpoints_requirer)
 
         self.kratos_info_requirer = KratosInfoRequirer(
             self, relation_name=KRATOS_INFO_INTEGRATION_NAME
         )
-        self.kratos_integration = KratosIntegration(self.kratos_info_requirer)
 
         self.oathkeeper_info_requirer = OathkeeperInfoRequirer(
             self, relation_name=OATHKEEPER_INFO_INTEGRATION_NAME
         )
-        self.oathkeeper_integration = OathkeeperIntegration(self.oathkeeper_info_requirer)
 
         self.openfga_requirer = OpenFGARequires(
             self, store_name=OPENFGA_STORE_NAME, relation_name=OPENFGA_INTEGRATION_NAME
@@ -126,9 +123,8 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             strip_prefix=True,
             redirect_https=False,
         )
-        self.ingress_integration = IngressIntegration(self.ingress_requirer)
 
-        oauth_client_config = load_oauth_client_config(self.ingress_integration.ingress_data.url)
+        oauth_client_config = load_oauth_client_config(IngressData.load(self.ingress_requirer).url)
         self.oauth_requirer = OAuthRequirer(self, oauth_client_config, OAUTH_INTEGRATION_NAME)
         self.oauth_integration = OAuthIntegration(self.oauth_requirer)
 
@@ -136,11 +132,10 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             self, CERTIFICATE_TRANSFER_INTEGRATION_NAME
         )
 
-        self.tracing = TracingEndpointRequirer(
+        self.tracing_requirer = TracingEndpointRequirer(
             self,
             relation_name=TEMPO_TRACING_INTEGRATION_NAME,
         )
-        self.tracing_integration = TracingIntegration(self.tracing)
 
         self.metrics_endpoint = MetricsEndpointProvider(
             self,
@@ -256,14 +251,14 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         self, event: IngressPerAppReadyEvent | IngressPerAppRevokedEvent
     ) -> None:
         if self.unit.is_leader():
-            ingress_data = self.ingress_integration.ingress_data
+            ingress_data = IngressData.load(self.ingress_requirer)
             self.oauth_integration.update_oauth_client_config(ingress_url=ingress_data.url)
 
         self._handle_status_update_config(event)
 
     def _on_oauth_info_changed(self, event: OAuthInfoChangedEvent) -> None:
         if self.unit.is_leader():
-            ingress_data = self.ingress_integration.ingress_data
+            ingress_data = IngressData.load(self.ingress_requirer)
             self.oauth_integration.update_oauth_client_config(ingress_data.url)
 
         self._handle_status_update_config(event)
@@ -346,12 +341,12 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
     def _pebble_layer(self) -> Layer:
         openfga_integration_data = self.openfga_integration.openfga_integration_data
         openfga_model_data = OpenFGAModelData.load(self.peer_data[self._workload_service.version])
-        kratos_data = self.kratos_integration.kratos_data
-        hydra_data = self.hydra_integration.hydra_data
-        ingress_data = self.ingress_integration.ingress_data
-        oathkeeper_data = self.oathkeeper_integration.oathkeeper_data
+        kratos_data = KratosData.load(self.kratos_info_requirer)
+        hydra_data = HydraData.load(self.hydra_endpoints_requirer)
+        ingress_data = IngressData.load(self.ingress_requirer)
+        oathkeeper_data = OathkeeperData.load(self.oathkeeper_info_requirer)
         oauth_data = self.oauth_integration.oauth_provider_data
-        tracing_data = self.tracing_integration.tracing_data
+        tracing_data = TracingData.load(self.tracing_requirer)
         charm_config = CharmConfig(self.config)
 
         return self._pebble_service.render_pebble_layer(

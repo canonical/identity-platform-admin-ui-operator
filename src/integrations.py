@@ -133,24 +133,19 @@ class KratosData:
             "SCHEMAS_CONFIGMAP_NAMESPACE": self.schemas_configmap_namespace,
         }
 
-
-class KratosIntegration:
-    def __init__(self, requirer: KratosInfoRequirer) -> None:
-        self._kratos_requirer = requirer
-
-    @property
-    def kratos_data(self) -> KratosData:
-        if not self._kratos_requirer.is_ready():
+    @classmethod
+    def load(cls, requirer: KratosInfoRequirer) -> "KratosData":
+        if not requirer.is_ready():
             return KratosData()
 
-        data = self._kratos_requirer.get_kratos_info() or {}
+        provider_data = requirer.get_kratos_info() or {}
         return KratosData(
-            admin_url=data.get("admin_endpoint", ""),
-            public_url=data.get("public_endpoint", ""),
-            idp_configmap_name=data.get("providers_configmap_name", ""),
-            idp_configmap_namespace=data.get("configmaps_namespace", ""),
-            schemas_configmap_name=data.get("schemas_configmap_name", ""),
-            schemas_configmap_namespace=data.get("configmaps_namespace", ""),
+            admin_url=provider_data.get("admin_endpoint", ""),
+            public_url=provider_data.get("public_endpoint", ""),
+            idp_configmap_name=provider_data.get("providers_configmap_name", ""),
+            idp_configmap_namespace=provider_data.get("configmaps_namespace", ""),
+            schemas_configmap_name=provider_data.get("schemas_configmap_name", ""),
+            schemas_configmap_namespace=provider_data.get("configmaps_namespace", ""),
         )
 
 
@@ -163,15 +158,10 @@ class HydraData:
             "HYDRA_ADMIN_URL": self.admin_url,
         }
 
-
-class HydraIntegration:
-    def __init__(self, endpoint_requirer: HydraEndpointsRequirer) -> None:
-        self._endpoint_requirer = endpoint_requirer
-
-    @property
-    def hydra_data(self) -> HydraData:
+    @classmethod
+    def load(cls, requirer: HydraEndpointsRequirer) -> "HydraData":
         try:
-            endpoints = self._endpoint_requirer.get_hydra_endpoints()
+            endpoints = requirer.get_hydra_endpoints()
         except Exception as e:
             logger.error("hydra-endpoint-info integration not ready: %s", e)
             return HydraData()
@@ -194,17 +184,12 @@ class OathkeeperData:
             "RULES_CONFIGMAP_NAMESPACE": self.rules_configmap_namespace,
         }
 
-
-class OathkeeperIntegration:
-    def __init__(self, requirer: OathkeeperInfoRequirer) -> None:
-        self._requirer = requirer
-
-    @property
-    def oathkeeper_data(self) -> OathkeeperData:
-        if not self._requirer.is_ready():
+    @classmethod
+    def load(cls, requirer: OathkeeperInfoRequirer) -> "OathkeeperData":
+        if not requirer.is_ready():
             return OathkeeperData()
 
-        data = self._requirer.get_oathkeeper_info() or {}
+        data = requirer.get_oathkeeper_info() or {}
         return OathkeeperData(
             public_url=data.get("public_endpoint", ""),
             rules_configmap_name=data.get("rules_configmap_name", ""),
@@ -225,20 +210,15 @@ class TracingData:
             "OTEL_GRPC_ENDPOINT": self.grpc_endpoint,
         }
 
-
-class TracingIntegration:
-    def __init__(self, requirer: TracingEndpointRequirer) -> None:
-        self._requirer = requirer
-
-    @property
-    def tracing_data(self) -> TracingData:
-        if not (is_ready := self._requirer.is_ready()):
+    @classmethod
+    def load(cls, requirer: TracingEndpointRequirer) -> "TracingData":
+        if not (is_ready := requirer.is_ready()):
             return TracingData()
 
         return TracingData(
             is_ready=is_ready,
-            http_endpoint=self._requirer.otlp_http_endpoint(),  # type: ignore[arg-type]
-            grpc_endpoint=self._requirer.otlp_grpc_endpoint(),  # type: ignore[arg-type]
+            http_endpoint=requirer.otlp_http_endpoint(),  # type: ignore[arg-type]
+            grpc_endpoint=requirer.otlp_grpc_endpoint(),  # type: ignore[arg-type]
         )
 
 
@@ -253,17 +233,12 @@ class IngressData:
             "OAUTH2_REDIRECT_URI": urljoin(self.url, OAUTH_CALLBACK_PATH),
         }
 
-
-class IngressIntegration:
-    def __init__(self, requirer: IngressPerAppRequirer) -> None:
-        self._requirer = requirer
-
-    @property
-    def ingress_data(self) -> IngressData:
-        if not (is_ready := self._requirer.is_ready()):
+    @classmethod
+    def load(cls, requirer: IngressPerAppRequirer) -> "IngressData":
+        if not (is_ready := requirer.is_ready()):
             return IngressData()
 
-        return IngressData(is_ready=is_ready, url=self._requirer.url)  # type: ignore[arg-type]
+        return IngressData(is_ready=is_ready, url=requirer.url)  # type: ignore[arg-type]
 
 
 @dataclass(frozen=True)

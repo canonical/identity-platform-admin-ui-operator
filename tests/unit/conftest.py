@@ -64,8 +64,7 @@ def mocked_charm_holistic_handler(mocker: MockerFixture) -> MagicMock:
 @pytest.fixture
 def mocked_ingress_data(mocker: MockerFixture) -> IngressData:
     mocked = mocker.patch(
-        "charm.IngressIntegration.ingress_data",
-        new_callable=PropertyMock,
+        "charm.IngressData.load",
         return_value=IngressData(is_ready=True, url=DEFAULT_BASE_URL),
     )
     return mocked.return_value

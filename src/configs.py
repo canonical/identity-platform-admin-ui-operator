@@ -13,7 +13,7 @@ class CharmConfig:
         self._config = config
 
     def to_env_vars(self) -> EnvVars:
-        log_level = self._config["log_level"]
+        log_level = self._config["log_level"].upper()
         return {
             "LOG_LEVEL": log_level,
             "DEBUG": "DEBUG" == log_level,

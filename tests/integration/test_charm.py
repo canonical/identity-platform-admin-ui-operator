@@ -64,6 +64,7 @@ async def test_build_and_deploy(
         trust=True,
     )
     await ops_test.model.integrate(OPENFGA_APP, DB_APP)
+    await ops_test.model.wait_for_idle(apps=[OPENFGA_APP, DB_APP], status="active", timeout=5 * 60)
 
     await ops_test.model.deploy(
         entity_url=OATHKEEPER_APP,
@@ -82,14 +83,14 @@ async def test_build_and_deploy(
         hydra_app_name,
     )
     await ops_test.model.integrate(ADMIN_SERVICE_APP, OPENFGA_APP)
-    await ops_test.model.integrate(f"{ADMIN_SERVICE_APP}:oathkeeper-info", OATHKEEPER_APP)
     await ops_test.model.integrate(ADMIN_SERVICE_APP, public_traefik_app_name)
     await ops_test.model.integrate(f"{ADMIN_SERVICE_APP}:oauth", hydra_app_name)
     await ops_test.model.integrate(ADMIN_SERVICE_APP, self_signed_certificates_app_name)
+    await ops_test.model.integrate(f"{ADMIN_SERVICE_APP}:oathkeeper-info", OATHKEEPER_APP)
 
     await ops_test.model.wait_for_idle(
         status="active",
-        timeout=1000,
+        timeout=10 * 60,
     )
 
 
@@ -155,7 +156,7 @@ async def test_scale_up(
     await ops_test.model.wait_for_idle(
         apps=[ADMIN_SERVICE_APP],
         status="active",
-        timeout=1000,
+        timeout=5 * 60,
         wait_for_exact_units=target_unit_number,
     )
 
@@ -181,7 +182,7 @@ async def test_scale_down(
     await ops_test.model.wait_for_idle(
         apps=[ADMIN_SERVICE_APP],
         status="active",
-        timeout=1000,
+        timeout=5 * 60,
         wait_for_exact_units=target_unit_num,
     )
 

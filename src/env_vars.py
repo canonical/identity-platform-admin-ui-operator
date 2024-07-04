@@ -38,5 +38,7 @@ DEFAULT_CONTAINER_ENV = {
 
 
 class EnvVarConvertible(Protocol):
+    """An interface enforcing the contribution to workload service environment variables."""
+
     def to_env_vars(self) -> EnvVars:
         pass

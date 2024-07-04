@@ -15,6 +15,8 @@ logger = logging.getLogger(__name__)
 
 
 class CommandLine:
+    """A class to handle command line interactions with admin service."""
+
     def __init__(self, container: Container):
         self.container = container
 

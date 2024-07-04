@@ -7,6 +7,8 @@ from env_vars import EnvVars
 
 
 class CharmConfig:
+    """A class representing the data source of charm configurations."""
+
     def __init__(self, config: ConfigData) -> None:
         self._config = config
 

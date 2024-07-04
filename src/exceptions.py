@@ -7,4 +7,4 @@ class CharmError(Exception):
 
 
 class PebbleError(CharmError):
-    """Error for tls pebble related operations."""
+    """Error for pebble related operations."""

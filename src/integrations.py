@@ -57,6 +57,8 @@ class PeerData:
 
 @dataclass(frozen=True)
 class OpenFGAModelData:
+    """The data source of the OpenFGA model."""
+
     model_id: str = ""
 
     def to_env_vars(self) -> EnvVars:
@@ -73,6 +75,8 @@ class OpenFGAModelData:
 
 @dataclass(frozen=True)
 class OpenFGAIntegrationData:
+    """The data source from the OpenFGA integration."""
+
     url: str = ""
     api_token: str = ""
     store_id: str = ""
@@ -116,6 +120,8 @@ class OpenFGAIntegration:
 
 @dataclass(frozen=True)
 class KratosData:
+    """The data source from the kratos-info integration."""
+
     admin_url: str = ""
     public_url: str = ""
     idp_configmap_name: str = ""
@@ -151,6 +157,8 @@ class KratosData:
 
 @dataclass(frozen=True)
 class HydraData:
+    """The data source from the hydra-endpoint-info integration."""
+
     admin_url: str = ""
 
     def to_env_vars(self) -> EnvVars:
@@ -173,6 +181,8 @@ class HydraData:
 
 @dataclass(frozen=True)
 class OathkeeperData:
+    """The data source from the Oathkeeper integration."""
+
     public_url: str = ""
     rules_configmap_name: str = ""
     rules_configmap_namespace: str = ""
@@ -199,6 +209,8 @@ class OathkeeperData:
 
 @dataclass(frozen=True)
 class TracingData:
+    """The data source from the tracing integration."""
+
     is_ready: bool = False
     http_endpoint: str = ""
     grpc_endpoint: str = ""
@@ -224,6 +236,8 @@ class TracingData:
 
 @dataclass(frozen=True)
 class IngressData:
+    """The data source from the ingress integration."""
+
     is_ready: bool = False
     url: str = DEFAULT_BASE_URL
 
@@ -243,6 +257,8 @@ class IngressData:
 
 @dataclass(frozen=True)
 class OAuthProviderData:
+    """The data source from the oauth integration."""
+
     auth_enabled: bool = False
     oidc_issuer_url: str = ""
     client_id: str = ""
@@ -288,10 +304,12 @@ class OAuthIntegration:
         self._requirer.update_client_config(client_config)
 
 
+# TODO(dushu) Remove when audience issue is fixed in login-ui
 def load_oauth_client_config(
     ingress_url: str,
     oauth_requirer: Optional[OAuthRequirer] = None,
 ) -> ClientConfig:
+    """The temporary factory of the ClientConfig provided to the oauth integration."""
     client = ClientConfig(
         redirect_uri=urljoin(ingress_url, OAUTH_CALLBACK_PATH),
         scope=OAUTH_SCOPES,

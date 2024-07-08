@@ -49,7 +49,7 @@ requires:
     limit: 1
     description: |
       Receive oauth server's info and a set of client credentials.
-      This relation can be used to integrate the admin UI with an oAuth2/OIDC Provider.
+      This integration can be used to integrate the admin UI with an OAuth2/OIDC Provider.
   receive-ca-cert:
     interface: certificate_transfer
     description: |

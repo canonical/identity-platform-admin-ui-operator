@@ -58,7 +58,7 @@ def mocked_openfga_store_ready(mocker: MockerFixture) -> MagicMock:
 
 @pytest.fixture
 def mocked_charm_holistic_handler(mocker: MockerFixture) -> MagicMock:
-    return mocker.patch("charm.IdentityPlatformAdminUIOperatorCharm._handle_status_update_config")
+    return mocker.patch("charm.IdentityPlatformAdminUIOperatorCharm._holistic_handler")
 
 
 @pytest.fixture

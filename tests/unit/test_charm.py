@@ -5,7 +5,6 @@
 
 from unittest.mock import MagicMock, patch
 
-from ops.model import WaitingStatus
 from ops.testing import Harness
 
 from constants import WORKLOAD_CONTAINER
@@ -50,7 +49,6 @@ class TestUpgradeCharmEvent:
         harness.charm.on.upgrade_charm.emit()
 
         mocked_workload_service.create_openfga_model.assert_not_called()
-        assert isinstance(harness.model.unit.status, WaitingStatus)
 
     def test_when_missing_peer_integration(
         self, harness: Harness, mocked_workload_service: MagicMock
@@ -58,7 +56,6 @@ class TestUpgradeCharmEvent:
         harness.charm.on.upgrade_charm.emit()
 
         mocked_workload_service.create_openfga_model.assert_not_called()
-        assert isinstance(harness.model.unit.status, WaitingStatus)
 
     @patch("charm.OpenFGAIntegration.is_store_ready", return_value=False)
     def test_when_openfga_store_not_ready(
@@ -101,7 +98,6 @@ class TestOpenFGAStoreCreatedEvent:
 
         mocked_workload_service.create_openfga_model.assert_not_called()
         mocked_charm_holistic_handler.assert_not_called()
-        assert isinstance(harness.charm.unit.status, WaitingStatus)
 
     def test_when_missing_peer_integration(
         self,
@@ -113,7 +109,6 @@ class TestOpenFGAStoreCreatedEvent:
 
         mocked_workload_service.create_openfga_model.assert_not_called()
         mocked_charm_holistic_handler.assert_not_called()
-        assert isinstance(harness.charm.unit.status, WaitingStatus)
 
     @patch("charm.OpenFGAIntegration.is_store_ready", return_value=False)
     def test_when_openfga_store_not_ready(

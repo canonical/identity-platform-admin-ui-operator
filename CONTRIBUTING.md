@@ -57,8 +57,10 @@ charmcraft pack
 ```shell
 # Create a model
 juju add-model dev
+
 # Enable DEBUG logging
 juju model-config logging-config="<root>=INFO;unit=DEBUG"
+
 # Deploy the charm
 juju deploy ./identity-platform-admin-ui*-amd64.charm --resource oci-image=$(yq eval '.resources.oci-image.upstream-source' metadata.yaml) --trust
 ```

@@ -5,6 +5,7 @@ from typing import Generator
 from unittest.mock import MagicMock, PropertyMock, create_autospec
 
 import pytest
+from ops import CollectStatusEvent, EventBase
 from ops.model import Container, Unit
 from ops.testing import Harness
 from pytest_mock import MockerFixture
@@ -42,6 +43,13 @@ def mocked_workload_service_version(mocker: MockerFixture) -> MagicMock:
     return mocker.patch(
         "charm.WorkloadService.version", new_callable=PropertyMock, return_value="1.10.0"
     )
+
+
+@pytest.fixture
+def mocked_pebble_service(mocker: MockerFixture, harness: Harness) -> MagicMock:
+    mocked = mocker.patch("charm.PebbleService", autospec=True)
+    harness.charm._pebble_service = mocked
+    return mocked
 
 
 @pytest.fixture
@@ -83,6 +91,16 @@ def mocked_unit(mocked_container: MagicMock) -> MagicMock:
 
 
 @pytest.fixture
+def mocked_event() -> MagicMock:
+    return create_autospec(EventBase)
+
+
+@pytest.fixture
+def mocked_collect_status_event() -> MagicMock:
+    return create_autospec(CollectStatusEvent)
+
+
+@pytest.fixture
 def peer_integration(harness: Harness) -> int:
     return harness.add_relation(PEER_INTEGRATION_NAME, "identity-platform-admin-ui")
 
@@ -93,3 +111,16 @@ def ingress_integration(harness: Harness) -> int:
         INGRESS_INTEGRATION_NAME,
         "ingress",
     )
+
+
+@pytest.fixture
+def all_satisfied_conditions(mocker: MockerFixture) -> None:
+    mocker.patch("charm.container_connectivity", return_value=True)
+    mocker.patch("charm.peer_integration_exists", return_value=True)
+    mocker.patch("charm.kratos_integration_exists", return_value=True)
+    mocker.patch("charm.hydra_integration_exists", return_value=True)
+    mocker.patch("charm.openfga_integration_exists", return_value=True)
+    mocker.patch("charm.ingress_integration_exists", return_value=True)
+    mocker.patch("charm.ca_certificate_exists", return_value=True)
+    mocker.patch("charm.openfga_store_readiness", return_value=True)
+    mocker.patch("charm.openfga_model_readiness", return_value=True)

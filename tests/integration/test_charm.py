@@ -20,6 +20,7 @@ from oauth_tools import ExternalIdpService, deploy_identity_bundle
 from pytest_operator.plugin import OpsTest
 
 from constants import (
+    CERTIFICATE_TRANSFER_INTEGRATION_NAME,
     HYDRA_ENDPOINTS_INTEGRATION_NAME,
     INGRESS_INTEGRATION_NAME,
     KRATOS_INFO_INTEGRATION_NAME,
@@ -201,6 +202,17 @@ async def test_remove_integration_ingress(
     admin_service_application: Application,
 ) -> None:
     async with remove_integration(ops_test, public_traefik_app_name, INGRESS_INTEGRATION_NAME):
+        assert "blocked" == admin_service_application.status
+
+
+async def test_remove_integration_certificate_transfer(
+    ops_test: OpsTest,
+    self_signed_certificates_app_name: str,
+    admin_service_application: Application,
+) -> None:
+    async with remove_integration(
+        ops_test, self_signed_certificates_app_name, CERTIFICATE_TRANSFER_INTEGRATION_NAME
+    ):
         assert "blocked" == admin_service_application.status
 
 

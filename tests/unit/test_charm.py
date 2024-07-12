@@ -3,11 +3,21 @@
 #
 # Learn more about testing at: https://juju.is/docs/sdk/testing
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, Mock, patch
 
+import pytest
+from ops import ActiveStatus, BlockedStatus, StatusBase, WaitingStatus
 from ops.testing import Harness
 
-from constants import WORKLOAD_CONTAINER
+from constants import (
+    HYDRA_ENDPOINTS_INTEGRATION_NAME,
+    INGRESS_INTEGRATION_NAME,
+    KRATOS_INFO_INTEGRATION_NAME,
+    OPENFGA_INTEGRATION_NAME,
+    PEER_INTEGRATION_NAME,
+    WORKLOAD_CONTAINER,
+)
+from exceptions import PebbleError
 from integrations import IngressData
 
 
@@ -332,3 +342,128 @@ class TestOAuthInfoRemovedEvent:
             mocked_ingress_data.url
         )
         mocked_charm_holistic_handler.assert_called_once()
+
+
+class TestHolisticHandler:
+    def test_when_noop_condition_failed(
+        self,
+        harness: Harness,
+        mocked_event: MagicMock,
+        mocked_workload_service: MagicMock,
+    ) -> None:
+        with (
+            patch("charm.NOOP_CONDITIONS", new=[Mock(return_value=False)]),
+            patch("charm.EVENT_DEFER_CONDITIONS", new=[Mock(return_value=True)]),
+        ):
+            harness.charm._holistic_handler(mocked_event)
+
+        mocked_event.defer.assert_not_called()
+        mocked_workload_service.prepare_dir.assert_not_called()
+
+    def test_when_event_defer_condition_failed(
+        self,
+        harness: Harness,
+        mocked_event: MagicMock,
+        mocked_workload_service: MagicMock,
+    ) -> None:
+        with (
+            patch("charm.NOOP_CONDITIONS", new=[Mock(return_value=True)]),
+            patch("charm.EVENT_DEFER_CONDITIONS", new=[Mock(return_value=False)]),
+        ):
+            harness.charm._holistic_handler(mocked_event)
+
+        mocked_event.defer.assert_called()
+        mocked_workload_service.prepare_dir.assert_not_called()
+
+    def test_when_all_conditions_satisfied(
+        self,
+        harness: Harness,
+        mocked_event: MagicMock,
+        mocked_workload_service: MagicMock,
+    ) -> None:
+        with (
+            patch("charm.NOOP_CONDITIONS", new=[Mock(return_value=True)]),
+            patch("charm.EVENT_DEFER_CONDITIONS", new=[Mock(return_value=True)]),
+        ):
+            harness.charm._holistic_handler(mocked_event)
+
+        mocked_event.defer.assert_not_called()
+        mocked_workload_service.prepare_dir.assert_called_once()
+
+
+class TestCollectStatusEvent:
+    def test_when_all_condition_satisfied(
+        self,
+        harness: Harness,
+        all_satisfied_conditions: MagicMock,
+        mocked_pebble_service: MagicMock,
+    ) -> None:
+        harness.evaluate_status()
+
+        mocked_pebble_service.plan.assert_called_once()
+        assert isinstance(harness.model.unit.status, ActiveStatus)
+
+    @pytest.mark.parametrize(
+        "condition, status, message",
+        [
+            ("container_connectivity", WaitingStatus, "Container is not connected yet"),
+            (
+                "peer_integration_exists",
+                WaitingStatus,
+                f"Missing integration {PEER_INTEGRATION_NAME}",
+            ),
+            (
+                "kratos_integration_exists",
+                BlockedStatus,
+                f"Missing integration {KRATOS_INFO_INTEGRATION_NAME}",
+            ),
+            (
+                "hydra_integration_exists",
+                BlockedStatus,
+                f"Missing integration {HYDRA_ENDPOINTS_INTEGRATION_NAME}",
+            ),
+            (
+                "openfga_integration_exists",
+                BlockedStatus,
+                f"Missing integration {OPENFGA_INTEGRATION_NAME}",
+            ),
+            (
+                "ingress_integration_exists",
+                BlockedStatus,
+                f"Missing integration {INGRESS_INTEGRATION_NAME}",
+            ),
+            (
+                "ca_certificate_exists",
+                BlockedStatus,
+                "Missing certificate transfer integration with oauth provider",
+            ),
+            ("openfga_store_readiness", WaitingStatus, "OpenFGA store is not ready yet"),
+            ("openfga_model_readiness", WaitingStatus, "OpenFGA model is not ready yet"),
+        ],
+    )
+    def test_when_a_condition_failed(
+        self,
+        harness: Harness,
+        all_satisfied_conditions: MagicMock,
+        mocked_pebble_service: MagicMock,
+        condition: str,
+        status: StatusBase,
+        message: str,
+    ) -> None:
+        with patch(f"charm.{condition}", return_value=False):
+            harness.evaluate_status()
+
+        mocked_pebble_service.plan.assert_called_once()
+        assert not isinstance(harness.model.unit.status, ActiveStatus)
+
+    def test_when_pebble_plan_failed(
+        self,
+        harness: Harness,
+        all_satisfied_conditions: MagicMock,
+    ) -> None:
+        with patch("charm.PebbleService.plan", side_effect=PebbleError):
+            harness.evaluate_status()
+
+        assert harness.model.unit.status == BlockedStatus(
+            f"Failed to plan pebble layer, please check the {WORKLOAD_CONTAINER} container logs"
+        )

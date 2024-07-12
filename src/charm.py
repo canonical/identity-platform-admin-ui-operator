@@ -42,7 +42,7 @@ from ops.charm import (
     WorkloadEvent,
 )
 from ops.main import main
-from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus
+from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from ops.pebble import Layer
 
 from configs import CharmConfig
@@ -60,6 +60,7 @@ from constants import (
     OAUTH_INTEGRATION_NAME,
     OPENFGA_INTEGRATION_NAME,
     OPENFGA_STORE_NAME,
+    PEER_INTEGRATION_NAME,
     PROMETHEUS_SCRAPE_INTEGRATION_NAME,
     TEMPO_TRACING_INTEGRATION_NAME,
     WORKLOAD_CONTAINER,
@@ -79,13 +80,18 @@ from integrations import (
 )
 from services import PebbleService, WorkloadService
 from utils import (
-    CONDITION_SIDE_EFFECT_REGISTRY,
-    CONDITION_STATUS_REGISTRY,
+    EVENT_DEFER_CONDITIONS,
+    NOOP_CONDITIONS,
+    ca_certificate_exists,
     container_connectivity,
-    defer_event,
+    hydra_integration_exists,
+    ingress_integration_exists,
+    kratos_integration_exists,
     leader_unit,
+    openfga_integration_exists,
+    openfga_model_readiness,
     openfga_store_readiness,
-    peer_integration_existence,
+    peer_integration_exists,
 )
 
 logger = logging.getLogger(__name__)
@@ -238,8 +244,8 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
 
     @leader_unit
     def _on_upgrade_charm(self, event: UpgradeCharmEvent) -> None:
-        if (not container_connectivity(self)) or (not peer_integration_existence(self)):
-            defer_event(event)
+        if (not container_connectivity(self)) or (not peer_integration_exists(self)):
+            event.defer()
             return
 
         if not openfga_store_readiness(self):
@@ -269,10 +275,10 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
     def _on_openfga_store_created(self, event: OpenFGAStoreCreateEvent) -> None:
         if (
             (not container_connectivity(self))
-            or (not peer_integration_existence(self))
+            or (not peer_integration_exists(self))
             or (not openfga_store_readiness(self))
         ):
-            defer_event(event)
+            event.defer()
             return
 
         if self.unit.is_leader():
@@ -291,40 +297,70 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
 
     def _on_certificate_available(self, event: CertificateAvailableEvent) -> None:
         if not container_connectivity(self):
-            defer_event(event)
+            event.defer()
 
         self._workload_service.push_ca_certs(event.ca)
         self._holistic_handler(event)
 
     def _on_certificate_removed(self, event: CertificateRemovedEvent) -> None:
         if not container_connectivity(self):
-            defer_event(event)
+            event.defer()
 
         self._workload_service.remove_ca_certs()
         self._holistic_handler(event)
 
-    def _on_collect_status(self, event: CollectStatusEvent) -> None:
+    def _on_collect_status(self, event: CollectStatusEvent) -> None:  # noqa: C901
         """The central management of the charm operator's status."""
-        for condition, status in CONDITION_STATUS_REGISTRY:
-            if not condition(self):
-                event.add_status(status)
-                return
+        if not container_connectivity(self):
+            event.add_status(WaitingStatus("Container is not connected yet"))
+
+        if not peer_integration_exists(self):
+            event.add_status(WaitingStatus(f"Missing integration {PEER_INTEGRATION_NAME}"))
+
+        if not kratos_integration_exists(self):
+            event.add_status(BlockedStatus(f"Missing integration {KRATOS_INFO_INTEGRATION_NAME}"))
+
+        if not hydra_integration_exists(self):
+            event.add_status(
+                BlockedStatus(f"Missing integration {HYDRA_ENDPOINTS_INTEGRATION_NAME}")
+            )
+
+        if not openfga_integration_exists(self):
+            event.add_status(BlockedStatus(f"Missing integration {OPENFGA_INTEGRATION_NAME}"))
+
+        if not ingress_integration_exists(self):
+            event.add_status(BlockedStatus(f"Missing integration {INGRESS_INTEGRATION_NAME}"))
+
+        if not ca_certificate_exists(self):
+            event.add_status(
+                BlockedStatus("Missing certificate transfer integration with oauth provider")
+            )
+
+        if not openfga_store_readiness(self):
+            event.add_status(WaitingStatus("OpenFGA store is not ready yet"))
+
+        if not openfga_model_readiness(self):
+            event.add_status(WaitingStatus("OpenFGA model is not ready yet"))
 
         try:
             self._pebble_service.plan(self._pebble_layer)
         except PebbleError:
-            event.add_status(BlockedStatus("Failed to plan pebble layer, please check the logs"))
-            return
+            event.add_status(
+                BlockedStatus(
+                    f"Failed to plan pebble layer, please check the {WORKLOAD_CONTAINER} container logs"
+                )
+            )
 
         event.add_status(ActiveStatus())
 
     def _holistic_handler(self, event: EventBase) -> None:
-        for condition, side_effect in CONDITION_SIDE_EFFECT_REGISTRY:
-            if not condition(self):
-                side_effect(event)
-                return
+        if not all(condition(self) for condition in NOOP_CONDITIONS):
+            return
 
-        self.unit.status = MaintenanceStatus("Configuring the Admin Service container")
+        if not all(condition(self) for condition in EVENT_DEFER_CONDITIONS):
+            event.defer()
+            return
+
         self._workload_service.prepare_dir(path=LOG_DIR)
 
     @property

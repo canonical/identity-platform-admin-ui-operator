@@ -20,6 +20,7 @@ from oauth_tools import ExternalIdpService, deploy_identity_bundle
 from pytest_operator.plugin import OpsTest
 
 from constants import (
+    CERTIFICATE_TRANSFER_INTEGRATION_NAME,
     HYDRA_ENDPOINTS_INTEGRATION_NAME,
     INGRESS_INTEGRATION_NAME,
     KRATOS_INFO_INTEGRATION_NAME,
@@ -169,27 +170,6 @@ async def test_scale_up(
     assert follower_openfga_data == leader_openfga_integration_data
 
 
-async def test_scale_down(
-    ops_test: OpsTest,
-    admin_service_application: Application,
-    leader_openfga_integration_data: Optional[dict],
-    leader_peer_integration_data: Optional[dict],
-) -> None:
-    target_unit_num = 1
-
-    await admin_service_application.scale(target_unit_num)
-
-    await ops_test.model.wait_for_idle(
-        apps=[ADMIN_SERVICE_APP],
-        status="active",
-        timeout=5 * 60,
-        wait_for_exact_units=target_unit_num,
-    )
-
-    assert leader_peer_integration_data
-    assert leader_openfga_integration_data
-
-
 async def test_remove_integration_openfga(
     ops_test: OpsTest,
     admin_service_application: Application,
@@ -223,3 +203,35 @@ async def test_remove_integration_ingress(
 ) -> None:
     async with remove_integration(ops_test, public_traefik_app_name, INGRESS_INTEGRATION_NAME):
         assert "blocked" == admin_service_application.status
+
+
+async def test_remove_integration_certificate_transfer(
+    ops_test: OpsTest,
+    self_signed_certificates_app_name: str,
+    admin_service_application: Application,
+) -> None:
+    async with remove_integration(
+        ops_test, self_signed_certificates_app_name, CERTIFICATE_TRANSFER_INTEGRATION_NAME
+    ):
+        assert "blocked" == admin_service_application.status
+
+
+async def test_scale_down(
+    ops_test: OpsTest,
+    admin_service_application: Application,
+    leader_openfga_integration_data: Optional[dict],
+    leader_peer_integration_data: Optional[dict],
+) -> None:
+    target_unit_num = 1
+
+    await admin_service_application.scale(target_unit_num)
+
+    await ops_test.model.wait_for_idle(
+        apps=[ADMIN_SERVICE_APP],
+        status="active",
+        timeout=5 * 60,
+        wait_for_exact_units=target_unit_num,
+    )
+
+    assert leader_peer_integration_data
+    assert leader_openfga_integration_data

@@ -5,79 +5,22 @@ import logging
 from functools import wraps
 from typing import Any, Callable, Optional, TypeVar
 
-from ops.charm import CharmBase, EventBase
-from ops.model import BlockedStatus, WaitingStatus
+from ops.charm import CharmBase
+
+from constants import (
+    CERTIFICATE_TRANSFER_INTEGRATION_NAME,
+    HYDRA_ENDPOINTS_INTEGRATION_NAME,
+    INGRESS_INTEGRATION_NAME,
+    KRATOS_INFO_INTEGRATION_NAME,
+    OPENFGA_INTEGRATION_NAME,
+    PEER_INTEGRATION_NAME,
+    WORKLOAD_CONTAINER,
+)
 
 logger = logging.getLogger(__name__)
 
 CharmEventHandler = TypeVar("CharmEventHandler", bound=Callable[..., Any])
-ConditionEvaluation = tuple[bool, str]
-Condition = Callable[[CharmBase], ConditionEvaluation]
-
-
-def container_not_connected(charm: CharmBase) -> ConditionEvaluation:
-    """Condition to validate workload container connectivity."""
-    not_connected = not charm._container.can_connect()
-    return not_connected, ("Container is not connected yet" if not_connected else "")
-
-
-def integration_not_exists(integration_name: str) -> Condition:
-    """A factory of conditions of integration existence validation."""
-
-    def wrapped(charm: CharmBase) -> ConditionEvaluation:
-        not_exists = not charm.model.relations[integration_name]
-        return not_exists, (f"Missing integration {integration_name}" if not_exists else "")
-
-    return wrapped
-
-
-def block_when(*conditions: Condition) -> Callable[[CharmEventHandler], CharmEventHandler]:
-    """A factory of decorators that block juju unit when a certain condition validation fails."""
-
-    def decorator(func: CharmEventHandler) -> CharmEventHandler:
-        """A decorator, applied to any event hook handler, to block juju unit."""
-
-        @wraps(func)
-        def wrapper(charm: CharmBase, *args: EventBase, **kwargs: Any) -> Optional[Any]:
-            event, *_ = args
-            logger.debug(f"Handling event: {event}.")
-
-            for condition in conditions:
-                not_met, msg = condition(charm)
-                if not_met:
-                    charm.unit.status = BlockedStatus(msg)
-                    return None
-
-            return func(charm, *args, **kwargs)
-
-        return wrapper  # type: ignore[return-value]
-
-    return decorator
-
-
-def wait_when(*conditions: Condition) -> Callable[[CharmEventHandler], CharmEventHandler]:
-    """A factory of decorators that put juju unit in wait status when a certain condition validation fails."""
-
-    def decorator(func: CharmEventHandler) -> CharmEventHandler:
-        """A decorator, applied to any event hook handler, to put juju unit in wait status."""
-
-        @wraps(func)
-        def wrapper(charm: CharmBase, *args: EventBase, **kwargs: Any) -> Optional[Any]:
-            event, *_ = args
-            logger.debug(f"Handling event: {event}.")
-
-            for condition in conditions:
-                not_met, msg = condition(charm)
-                if not_met:
-                    event.defer()
-                    charm.unit.status = WaitingStatus(msg)
-                    return None
-
-            return func(charm, *args, **kwargs)
-
-        return wrapper  # type: ignore[return-value]
-
-    return decorator
+Condition = Callable[[CharmBase], bool]
 
 
 def leader_unit(func: CharmEventHandler) -> CharmEventHandler:
@@ -91,3 +34,61 @@ def leader_unit(func: CharmEventHandler) -> CharmEventHandler:
         return func(charm, *args, **kwargs)
 
     return wrapper  # type: ignore[return-value]
+
+
+def integration_existence(integration_name: str) -> Condition:
+    """A factory of integration existence condition."""
+
+    def wrapped(charm: CharmBase) -> bool:
+        return bool(charm.model.relations[integration_name])
+
+    return wrapped
+
+
+peer_integration_exists = integration_existence(PEER_INTEGRATION_NAME)
+kratos_integration_exists = integration_existence(KRATOS_INFO_INTEGRATION_NAME)
+hydra_integration_exists = integration_existence(HYDRA_ENDPOINTS_INTEGRATION_NAME)
+openfga_integration_exists = integration_existence(OPENFGA_INTEGRATION_NAME)
+ingress_integration_exists = integration_existence(INGRESS_INTEGRATION_NAME)
+cert_transfer_integration_exists = integration_existence(CERTIFICATE_TRANSFER_INTEGRATION_NAME)
+
+
+def container_connectivity(charm: CharmBase) -> bool:
+    return charm.unit.get_container(WORKLOAD_CONTAINER).can_connect()
+
+
+def oauth_is_ready(charm: CharmBase) -> bool:
+    return charm.oauth_integration.is_ready()
+
+
+def ca_certificate_exists(charm: CharmBase) -> bool:
+    return (
+        False if (oauth_is_ready(charm) and not cert_transfer_integration_exists(charm)) else True
+    )
+
+
+def openfga_store_readiness(charm: CharmBase) -> bool:
+    return charm.openfga_integration.is_store_ready()
+
+
+def openfga_model_readiness(charm: CharmBase) -> bool:
+    return bool(charm.peer_data[charm._workload_service.version])
+
+
+# Condition failure causes early return without doing anything
+NOOP_CONDITIONS: tuple[Condition, ...] = (
+    kratos_integration_exists,
+    hydra_integration_exists,
+    openfga_integration_exists,
+    ingress_integration_exists,
+    ca_certificate_exists,
+)
+
+
+# Condition failure causes early return with corresponding event deferred
+EVENT_DEFER_CONDITIONS: tuple[Condition, ...] = (
+    container_connectivity,
+    peer_integration_exists,
+    openfga_store_readiness,
+    openfga_model_readiness,
+)

@@ -1,5 +1,6 @@
-# Identity Platform Admin UI Operator
+# Identity Platform Admin UI Charmed Operator
 
+[![CharmHub Badge](https://charmhub.io/identity-platform-admin-ui/badge.svg)](https://charmhub.io/identity-platform-admin-ui)
 [![Juju](https://img.shields.io/badge/Juju%20-3.0+-%23E95420)](https://github.com/juju/juju)
 [![License](https://img.shields.io/github/license/canonical/identity-platform-admin-ui-operator?label=License)](https://github.com/canonical/identity-platform-admin-ui-operator/blob/main/LICENSE)
 
@@ -9,36 +10,67 @@
 
 ## Description
 
-This repository hosts a Charmed Operator for the Identity Platform Admin UI
-application. This Operator supports Juju deployments on Kubernetes cloud.
+This repository hosts a Juju Kubernetes Charmed Operator for
+the [Identity Platform Admin UI application](https://github.com/canonical/identity-platform-admin-ui).
 
 ## Usage
 
-After cloning the repository, you may deploy the Identity Platform Admin UI
-Operator with the following commands:
+The `identity-platform-admin-ui` operator can be deployed using the following
+command:
 
 ```shell
-charmcraft pack
-juju deploy ./identity-platform-admin-ui*-amd64.charm \
-  --resource oci-image=$(yq eval '.resources.oci-image.upstream-source' metadata.yaml) \
-  --trust
+juju deploy identity-platform-admin-ui --channel edge --trust
 ```
-
-You can follow the deployment status with `watch -c juju status --color`.
 
 ## Integrations
 
-### Ingress
+Please refer to the [`metadata.yaml`](./metadata.yaml) for all required and
+provided integrations.
 
-The Identity Platform Admin UI Operator offers integration with
-the [traefik-k8s-operator](https://github.com/canonical/traefik-k8s-operator)
-for ingress.
-
-If you have traefik deployed and configured in your juju model, run the
-following command to provide ingress:
+### `kratos_info` Integration
 
 ```shell
-juju integrate traefik-k8s identity-platform-admin-ui:ingress
+juju integrate identity-platform-admin-ui:kratos-info kratos
+```
+
+### `hydra_endpoint_info` Integration
+
+```shell
+juju integrate identity-platform-admin-ui:hydra-endpoint-info hydra
+```
+
+### `oathkeeper_info` Integration
+
+```shell
+juju integrate identity-platform-admin-ui:oathkeeper-info oathkeeper
+```
+
+### `openfga` Integration
+
+```shell
+juju integrate identity-platform-admin-ui openfga-k8s
+```
+
+### `ingress` Integration
+
+```shell
+juju integrate identity-platform-admin-ui:ingress traefik-k8s
+```
+
+### `oauth` Integration
+
+```shell
+juju integrate identity-platform-admin-ui:oauth hydra
+```
+
+### `certificate_transfer` integration
+
+If the `oauth` integration is built, please also integrate with a CA issuer
+charmed operator,
+e.g.[elf-signed-certificats` operator](https://github.com/canonical/self-signed-certificates-operator):
+
+```shell
+juju integrate identity-platform-admin-ui:receive-ca-cert self-signed-certificates
 ```
 
 ## Security
@@ -56,7 +88,7 @@ for developer guidance.
 
 ## License
 
-The Charmed Identity Platform Admin UI Operator is a free software, distributed
+The Identity Platform Admin UI Charmed Operator is a free software, distributed
 under the Apache Software License, version 2.0.
 See [LICENSE](https://github.com/canonical/identity-platform-admin-ui-operator/blob/main/LICENSE)
 for more information.

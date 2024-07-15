@@ -70,14 +70,6 @@ class TestWorkloadService:
             CA_CERT_DIR_PATH / "ca-certificates.crt", ca_certs, make_dirs=True
         )
 
-    def test_remove_ca_certs(
-        self, mocked_container: MagicMock, workload_service: WorkloadService
-    ) -> None:
-        workload_service.remove_ca_certs()
-        mocked_container.remove_path.assert_called_once_with(
-            CA_CERT_DIR_PATH / "ca-certificates.crt"
-        )
-
     @pytest.mark.parametrize("model_id, expected", [("model_id", "model_id"), (None, "")])
     def test_create_openfga_model(
         self, workload_service: WorkloadService, model_id: Optional[str], expected: str

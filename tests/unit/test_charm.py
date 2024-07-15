@@ -18,7 +18,7 @@ from constants import (
     WORKLOAD_CONTAINER,
 )
 from exceptions import PebbleError
-from integrations import IngressData
+from integrations import IngressData, TLSCertificates
 
 
 class TestPebbleReadyEvent:
@@ -344,6 +344,46 @@ class TestOAuthInfoRemovedEvent:
         mocked_charm_holistic_handler.assert_called_once()
 
 
+class TestCertificateAvailableEvent:
+    def test_certificate_available_event_success(
+        self,
+        harness: Harness,
+        certificate_transfer_integration: int,
+        mocked_workload_service: MagicMock,
+        mocked_charm_holistic_handler: MagicMock,
+    ) -> None:
+        harness.charm.certificate_transfer_requirer.on.certificate_available.emit(
+            "certificate",
+            "ca",
+            ["certificate", "ca"],
+            certificate_transfer_integration,
+        )
+
+        mocked_charm_holistic_handler.assert_called_once()
+        event = mocked_charm_holistic_handler.call_args.args[0]
+        assert event.snapshot() == {
+            "certificate": "certificate",
+            "ca": "ca",
+            "chain": ["certificate", "ca"],
+            "relation_id": certificate_transfer_integration,
+        }
+
+
+class TestCertificateRemovedEvent:
+    def test_certificate_removed_event_success(
+        self,
+        harness: Harness,
+        certificate_transfer_integration: int,
+        mocked_workload_service: MagicMock,
+        mocked_charm_holistic_handler: MagicMock,
+    ) -> None:
+        harness.charm.certificate_transfer_requirer.on.certificate_removed.emit(
+            certificate_transfer_integration,
+        )
+
+        mocked_charm_holistic_handler.assert_called_once()
+
+
 class TestHolisticHandler:
     def test_when_noop_condition_failed(
         self,
@@ -359,6 +399,7 @@ class TestHolisticHandler:
 
         mocked_event.defer.assert_not_called()
         mocked_workload_service.prepare_dir.assert_not_called()
+        mocked_workload_service.push_ca_certs.assert_not_called()
 
     def test_when_event_defer_condition_failed(
         self,
@@ -374,9 +415,14 @@ class TestHolisticHandler:
 
         mocked_event.defer.assert_called()
         mocked_workload_service.prepare_dir.assert_not_called()
+        mocked_workload_service.push_ca_certs.assert_not_called()
 
+    @patch(
+        "charm.TLSCertificates.load", return_value=TLSCertificates(ca_bundle="mocked_ca_bundle")
+    )
     def test_when_all_conditions_satisfied(
         self,
+        mocked_ca_bundle: MagicMock,
         harness: Harness,
         mocked_event: MagicMock,
         mocked_workload_service: MagicMock,
@@ -389,6 +435,9 @@ class TestHolisticHandler:
 
         mocked_event.defer.assert_not_called()
         mocked_workload_service.prepare_dir.assert_called_once()
+        mocked_workload_service.push_ca_certs.assert_called_once_with(
+            mocked_ca_bundle.return_value.ca_bundle
+        )
 
 
 class TestCollectStatusEvent:

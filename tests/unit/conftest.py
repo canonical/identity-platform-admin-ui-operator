@@ -12,6 +12,7 @@ from pytest_mock import MockerFixture
 
 from charm import IdentityPlatformAdminUIOperatorCharm
 from constants import (
+    CERTIFICATE_TRANSFER_INTEGRATION_NAME,
     DEFAULT_BASE_URL,
     INGRESS_INTEGRATION_NAME,
     PEER_INTEGRATION_NAME,
@@ -110,6 +111,14 @@ def ingress_integration(harness: Harness) -> int:
     return harness.add_relation(
         INGRESS_INTEGRATION_NAME,
         "ingress",
+    )
+
+
+@pytest.fixture
+def certificate_transfer_integration(harness: Harness) -> int:
+    return harness.add_relation(
+        CERTIFICATE_TRANSFER_INTEGRATION_NAME,
+        "self-signed-certificate",
     )
 
 

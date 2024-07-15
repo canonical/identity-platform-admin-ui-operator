@@ -7,6 +7,9 @@ from dataclasses import dataclass
 from typing import Any, Mapping, Optional
 from urllib.parse import urljoin, urlparse
 
+from charms.certificate_transfer_interface.v0.certificate_transfer import (
+    CertificateTransferRequires,
+)
 from charms.hydra.v0.hydra_endpoints import HydraEndpointsRequirer
 from charms.hydra.v0.oauth import ClientConfig, OAuthRequirer
 from charms.kratos.v0.kratos_info import KratosInfoRequirer
@@ -17,6 +20,7 @@ from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 from ops.model import Model
 
 from constants import (
+    CERTIFICATE_TRANSFER_INTEGRATION_NAME,
     DEFAULT_ACCESS_TOKEN_VERIFICATION_STRATEGY,
     DEFAULT_BASE_URL,
     OAUTH_CALLBACK_PATH,
@@ -302,6 +306,31 @@ class OAuthIntegration:
     def update_oauth_client_config(self, ingress_url: str) -> None:
         client_config = load_oauth_client_config(ingress_url, self._requirer)
         self._requirer.update_client_config(client_config)
+
+
+@dataclass(frozen=True)
+class TLSCertificates:
+    ca_bundle: str
+
+    @classmethod
+    def load(cls, requirer: CertificateTransferRequires) -> "TLSCertificates":
+        """Fetch the CA certificates from all "receive-ca-cert" integrations.
+
+        Compose the trusted CA certificates in /etc/ssl/certs/ca-certificates.crt.
+        """
+        cert_transfer_integrations = requirer.charm.model.relations[
+            CERTIFICATE_TRANSFER_INTEGRATION_NAME
+        ]
+
+        ca_certs = {
+            integration.data[unit]["ca"]
+            for integration in cert_transfer_integrations
+            for unit in integration.units
+            if "ca" in integration.data[unit]
+        }
+
+        ca_bundle = "\n".join(ca_certs)
+        return cls(ca_bundle=ca_bundle)
 
 
 # TODO(dushu) Remove when audience issue is fixed in login-ui

@@ -75,6 +75,7 @@ from integrations import (
     OpenFGAIntegration,
     OpenFGAModelData,
     PeerData,
+    TLSCertificates,
     TracingData,
     load_oauth_client_config,
 )
@@ -217,11 +218,11 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         )
         self.framework.observe(
             self.certificate_transfer_requirer.on.certificate_available,
-            self._on_certificate_available,
+            self._on_certificate_changed,
         )
         self.framework.observe(
             self.certificate_transfer_requirer.on.certificate_removed,
-            self._on_certificate_removed,
+            self._on_certificate_changed,
         )
 
         self.framework.observe(
@@ -295,18 +296,10 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
 
         self._holistic_handler(event)
 
-    def _on_certificate_available(self, event: CertificateAvailableEvent) -> None:
-        if not container_connectivity(self):
-            event.defer()
-
-        self._workload_service.push_ca_certs(event.ca)
-        self._holistic_handler(event)
-
-    def _on_certificate_removed(self, event: CertificateRemovedEvent) -> None:
-        if not container_connectivity(self):
-            event.defer()
-
-        self._workload_service.remove_ca_certs()
+    def _on_certificate_changed(
+        self, event: CertificateAvailableEvent | CertificateRemovedEvent
+    ) -> None:
+        # Delegate to the holistic method for managing TLS certificates in container's filesystem
         self._holistic_handler(event)
 
     def _on_collect_status(self, event: CollectStatusEvent) -> None:  # noqa: C901
@@ -362,6 +355,10 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             return
 
         self._workload_service.prepare_dir(path=LOG_DIR)
+
+        # Install the certificates in various event scenarios
+        certs = TLSCertificates.load(self.certificate_transfer_requirer)
+        self._workload_service.push_ca_certs(certs.ca_bundle)
 
     @property
     def _pebble_layer(self) -> Layer:

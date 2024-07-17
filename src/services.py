@@ -3,11 +3,10 @@
 
 import logging
 from collections import ChainMap
-from contextlib import suppress
 from pathlib import PurePath
 
 from ops.model import Container, Unit
-from ops.pebble import Layer, LayerDict, PathError
+from ops.pebble import Layer, LayerDict
 
 from cli import CommandLine
 from constants import (
@@ -84,10 +83,6 @@ class WorkloadService:
 
     def push_ca_certs(self, ca_certs: str | PurePath) -> None:
         self._container.push(CA_CERT_DIR_PATH / "ca-certificates.crt", ca_certs, make_dirs=True)
-
-    def remove_ca_certs(self) -> None:
-        with suppress(PathError):
-            self._container.remove_path(CA_CERT_DIR_PATH / "ca-certificates.crt")
 
     def create_openfga_model(self, openfga_data: OpenFGAIntegrationData) -> str:
         model_id = self._cli.create_openfga_model(

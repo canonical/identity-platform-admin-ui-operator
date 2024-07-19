@@ -12,6 +12,7 @@ from constants import (
     HYDRA_ENDPOINTS_INTEGRATION_NAME,
     INGRESS_INTEGRATION_NAME,
     KRATOS_INFO_INTEGRATION_NAME,
+    OAUTH_INTEGRATION_NAME,
     OPENFGA_INTEGRATION_NAME,
     PEER_INTEGRATION_NAME,
     WORKLOAD_CONTAINER,
@@ -50,6 +51,7 @@ kratos_integration_exists = integration_existence(KRATOS_INFO_INTEGRATION_NAME)
 hydra_integration_exists = integration_existence(HYDRA_ENDPOINTS_INTEGRATION_NAME)
 openfga_integration_exists = integration_existence(OPENFGA_INTEGRATION_NAME)
 ingress_integration_exists = integration_existence(INGRESS_INTEGRATION_NAME)
+oauth_integration_exists = integration_existence(OAUTH_INTEGRATION_NAME)
 cert_transfer_integration_exists = integration_existence(CERTIFICATE_TRANSFER_INTEGRATION_NAME)
 
 
@@ -63,7 +65,9 @@ def oauth_is_ready(charm: CharmBase) -> bool:
 
 def ca_certificate_exists(charm: CharmBase) -> bool:
     return (
-        False if (oauth_is_ready(charm) and not cert_transfer_integration_exists(charm)) else True
+        oauth_integration_exists(charm)
+        and cert_transfer_integration_exists(charm)
+        and charm._ca_bundle
     )
 
 
@@ -79,6 +83,7 @@ def openfga_model_readiness(charm: CharmBase) -> bool:
 NOOP_CONDITIONS: tuple[Condition, ...] = (
     kratos_integration_exists,
     hydra_integration_exists,
+    oauth_integration_exists,
     openfga_integration_exists,
     ingress_integration_exists,
     ca_certificate_exists,

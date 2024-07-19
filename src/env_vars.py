@@ -3,7 +3,7 @@
 
 from typing import Mapping, Protocol, TypeAlias, Union
 
-from constants import ADMIN_SERVICE_PORT, DEFAULT_BASE_URL, LOG_FILE
+from constants import ADMIN_SERVICE_PORT, DEFAULT_CONTEXT_PATH, LOG_FILE
 
 EnvVars: TypeAlias = Mapping[str, Union[str, bool]]
 
@@ -27,10 +27,11 @@ DEFAULT_CONTAINER_ENV = {
     "RULES_CONFIGMAP_NAMESPACE": "",
     "RULES_CONFIGMAP_FILE_NAME": "",
     "PORT": str(ADMIN_SERVICE_PORT),
-    "BASE_URL": DEFAULT_BASE_URL,
     "TRACING_ENABLED": False,
     "OTEL_HTTP_ENDPOINT": "",
     "OTEL_GRPC_ENDPOINT": "",
+    "OAUTH2_AUTH_COOKIES_ENCRYPTION_KEY": "",
+    "CONTEXT_PATH": DEFAULT_CONTEXT_PATH,
     "LOG_LEVEL": "info",
     "LOG_FILE": str(LOG_FILE),
     "DEBUG": False,

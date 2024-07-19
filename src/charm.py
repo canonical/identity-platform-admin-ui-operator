@@ -7,6 +7,7 @@
 """A Juju Kubernetes charmed operator for Identity Platform Admin UI."""
 
 import logging
+from functools import cached_property
 from typing import Any
 
 from charms.certificate_transfer_interface.v0.certificate_transfer import (
@@ -89,6 +90,7 @@ from utils import (
     ingress_integration_exists,
     kratos_integration_exists,
     leader_unit,
+    oauth_integration_exists,
     openfga_integration_exists,
     openfga_model_readiness,
     openfga_store_readiness,
@@ -318,6 +320,9 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
                 BlockedStatus(f"Missing integration {HYDRA_ENDPOINTS_INTEGRATION_NAME}")
             )
 
+        if not oauth_integration_exists(self):
+            event.add_status(BlockedStatus(f"Missing integration {OAUTH_INTEGRATION_NAME}"))
+
         if not openfga_integration_exists(self):
             event.add_status(BlockedStatus(f"Missing integration {OPENFGA_INTEGRATION_NAME}"))
 
@@ -346,16 +351,23 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             return
 
         self._workload_service.prepare_dir(path=LOG_DIR)
+        if self.unit.is_leader():
+            self.peer_data.prepare()
 
         # Install the certificates in various event scenarios
-        certs = TLSCertificates.load(self.certificate_transfer_requirer)
-        self._workload_service.push_ca_certs(certs.ca_bundle)
+        self._workload_service.push_ca_certs(self._ca_bundle)
 
         try:
             self._pebble_service.plan(self._pebble_layer)
         except PebbleError:
-            logger.error(f"Failed to plan pebble layer, please check the {WORKLOAD_CONTAINER} container logs")
+            logger.error(
+                f"Failed to plan pebble layer, please check the {WORKLOAD_CONTAINER} container logs"
+            )
             raise
+
+    @cached_property
+    def _ca_bundle(self) -> str:
+        return TLSCertificates.load(self.certificate_transfer_requirer).ca_bundle
 
     @property
     def _pebble_layer(self) -> Layer:
@@ -378,6 +390,7 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             openfga_integration_data,
             openfga_model_data,
             tracing_data,
+            self.peer_data,
             charm_config,
         )
 

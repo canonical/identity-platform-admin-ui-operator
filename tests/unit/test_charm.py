@@ -13,6 +13,7 @@ from constants import (
     HYDRA_ENDPOINTS_INTEGRATION_NAME,
     INGRESS_INTEGRATION_NAME,
     KRATOS_INFO_INTEGRATION_NAME,
+    OAUTH_INTEGRATION_NAME,
     OPENFGA_INTEGRATION_NAME,
     PEER_INTEGRATION_NAME,
     WORKLOAD_CONTAINER,
@@ -472,6 +473,11 @@ class TestCollectStatusEvent:
                 f"Missing integration {HYDRA_ENDPOINTS_INTEGRATION_NAME}",
             ),
             (
+                "oauth_integration_exists",
+                BlockedStatus,
+                f"Missing integration {OAUTH_INTEGRATION_NAME}",
+            ),
+            (
                 "openfga_integration_exists",
                 BlockedStatus,
                 f"Missing integration {OPENFGA_INTEGRATION_NAME}",
@@ -510,10 +516,11 @@ class TestCollectStatusEvent:
         mocked_event: MagicMock,
         all_satisfied_conditions: MagicMock,
     ) -> None:
-        with (patch("charm.PebbleService.plan", side_effect=PebbleError),
-              patch("charm.NOOP_CONDITIONS", new=[Mock(return_value=True)]),
-              patch("charm.EVENT_DEFER_CONDITIONS", new=[Mock(return_value=True)]),
-              pytest.raises(PebbleError),
+        with (
+            patch("charm.PebbleService.plan", side_effect=PebbleError),
+            patch("charm.NOOP_CONDITIONS", new=[Mock(return_value=True)]),
+            patch("charm.EVENT_DEFER_CONDITIONS", new=[Mock(return_value=True)]),
+            pytest.raises(PebbleError),
         ):
             harness.charm._holistic_handler(mocked_event)
 

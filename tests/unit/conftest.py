@@ -128,6 +128,7 @@ def all_satisfied_conditions(mocker: MockerFixture) -> None:
     mocker.patch("charm.peer_integration_exists", return_value=True)
     mocker.patch("charm.kratos_integration_exists", return_value=True)
     mocker.patch("charm.hydra_integration_exists", return_value=True)
+    mocker.patch("charm.oauth_integration_exists", return_value=True)
     mocker.patch("charm.openfga_integration_exists", return_value=True)
     mocker.patch("charm.ingress_integration_exists", return_value=True)
     mocker.patch("charm.ca_certificate_exists", return_value=True)

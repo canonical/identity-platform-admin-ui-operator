@@ -426,6 +426,7 @@ class TestHolisticHandler:
         harness: Harness,
         mocked_event: MagicMock,
         mocked_workload_service: MagicMock,
+        mocked_pebble_service: MagicMock,
     ) -> None:
         with (
             patch("charm.NOOP_CONDITIONS", new=[Mock(return_value=True)]),
@@ -438,6 +439,7 @@ class TestHolisticHandler:
         mocked_workload_service.push_ca_certs.assert_called_once_with(
             mocked_ca_bundle.return_value.ca_bundle
         )
+        mocked_pebble_service.plan.assert_called_once()
 
 
 class TestCollectStatusEvent:
@@ -445,11 +447,9 @@ class TestCollectStatusEvent:
         self,
         harness: Harness,
         all_satisfied_conditions: MagicMock,
-        mocked_pebble_service: MagicMock,
     ) -> None:
         harness.evaluate_status()
 
-        mocked_pebble_service.plan.assert_called_once()
         assert isinstance(harness.model.unit.status, ActiveStatus)
 
     @pytest.mark.parametrize(
@@ -502,17 +502,21 @@ class TestCollectStatusEvent:
         with patch(f"charm.{condition}", return_value=False):
             harness.evaluate_status()
 
-        mocked_pebble_service.plan.assert_called_once()
         assert not isinstance(harness.model.unit.status, ActiveStatus)
 
     def test_when_pebble_plan_failed(
         self,
         harness: Harness,
+        mocked_event: MagicMock,
         all_satisfied_conditions: MagicMock,
     ) -> None:
-        with patch("charm.PebbleService.plan", side_effect=PebbleError):
-            harness.evaluate_status()
+        with (patch("charm.PebbleService.plan", side_effect=PebbleError),
+              patch("charm.NOOP_CONDITIONS", new=[Mock(return_value=True)]),
+              patch("charm.EVENT_DEFER_CONDITIONS", new=[Mock(return_value=True)]),
+              pytest.raises(PebbleError),
+        ):
+            harness.charm._holistic_handler(mocked_event)
 
-        assert harness.model.unit.status == BlockedStatus(
+        harness.model.unit.status == BlockedStatus(
             f"Failed to plan pebble layer, please check the {WORKLOAD_CONTAINER} container logs"
         )

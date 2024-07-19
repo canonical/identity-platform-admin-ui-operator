@@ -335,15 +335,6 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         if not openfga_model_readiness(self):
             event.add_status(WaitingStatus("OpenFGA model is not ready yet"))
 
-        try:
-            self._pebble_service.plan(self._pebble_layer)
-        except PebbleError:
-            event.add_status(
-                BlockedStatus(
-                    f"Failed to plan pebble layer, please check the {WORKLOAD_CONTAINER} container logs"
-                )
-            )
-
         event.add_status(ActiveStatus())
 
     def _holistic_handler(self, event: EventBase) -> None:
@@ -359,6 +350,12 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         # Install the certificates in various event scenarios
         certs = TLSCertificates.load(self.certificate_transfer_requirer)
         self._workload_service.push_ca_certs(certs.ca_bundle)
+
+        try:
+            self._pebble_service.plan(self._pebble_layer)
+        except PebbleError:
+            logger.error(f"Failed to plan pebble layer, please check the {WORKLOAD_CONTAINER} container logs")
+            raise
 
     @property
     def _pebble_layer(self) -> Layer:

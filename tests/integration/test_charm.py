@@ -26,7 +26,7 @@ from oauth_tools import (
     get_reverse_proxy_app_url,
     verify_page_loads,
 )
-from playwright.async_api._generated import BrowserContext, Page
+from playwright.async_api import BrowserContext, Page
 from pytest_operator.plugin import OpsTest
 
 from constants import (

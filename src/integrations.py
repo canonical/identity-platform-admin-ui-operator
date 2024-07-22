@@ -7,7 +7,7 @@ import secrets
 import socket
 from dataclasses import dataclass
 from os.path import join
-from typing import Any, Mapping, Optional
+from typing import Any, Mapping, Optional, Union
 from urllib.parse import urlparse
 
 from charms.certificate_transfer_interface.v0.certificate_transfer import (
@@ -33,6 +33,7 @@ from constants import (
     PEER_INTEGRATION_NAME,
 )
 from env_vars import EnvVars
+from exceptions import MissingCookieKey
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +43,7 @@ class PeerData:
         self._model = model
         self._app = model.app
 
-    def __getitem__(self, key: str) -> dict:
+    def __getitem__(self, key: str) -> Union[dict, str]:
         if not (peers := self._model.get_relation(PEER_INTEGRATION_NAME)):
             return {}
 
@@ -55,7 +56,7 @@ class PeerData:
 
         peers.data[self._app][key] = json.dumps(value)
 
-    def pop(self, key: str) -> dict:
+    def pop(self, key: str) -> Union[dict, str]:
         if not (peers := self._model.get_relation(PEER_INTEGRATION_NAME)):
             return {}
 
@@ -63,12 +64,20 @@ class PeerData:
         return json.loads(data) if data else {}
 
     def prepare(self) -> None:
+        if not self._model.unit.is_leader():
+            return
+
         if not self[COOKIES_KEY]:
             self[COOKIES_KEY] = secrets.token_hex(16)
 
     def to_env_vars(self) -> EnvVars:
+        key = self[COOKIES_KEY]
+        if not isinstance(key, str):
+            logger.error("No cookie key found in the databag.")
+            raise MissingCookieKey()
+
         return {
-            "OAUTH2_AUTH_COOKIES_ENCRYPTION_KEY": self[COOKIES_KEY],
+            "OAUTH2_AUTH_COOKIES_ENCRYPTION_KEY": key,
         }
 
 

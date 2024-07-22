@@ -508,12 +508,14 @@ class TestCollectStatusEvent:
         with patch(f"charm.{condition}", return_value=False):
             harness.evaluate_status()
 
-        assert not isinstance(harness.model.unit.status, ActiveStatus)
+        assert isinstance(harness.model.unit.status, status)
+        assert harness.model.unit.status.message == message
 
     def test_when_pebble_plan_failed(
         self,
         harness: Harness,
         mocked_event: MagicMock,
+        peer_integration: int,
         all_satisfied_conditions: MagicMock,
     ) -> None:
         with (
@@ -523,7 +525,3 @@ class TestCollectStatusEvent:
             pytest.raises(PebbleError),
         ):
             harness.charm._holistic_handler(mocked_event)
-
-        harness.model.unit.status == BlockedStatus(
-            f"Failed to plan pebble layer, please check the {WORKLOAD_CONTAINER} container logs"
-        )

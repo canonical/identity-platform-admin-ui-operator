@@ -4,9 +4,11 @@
 
 import json
 import logging
+import os
 from typing import Callable, Optional
 
 import pytest
+import requests
 from conftest import (
     ADMIN_SERVICE_APP,
     ADMIN_SERVICE_IMAGE,
@@ -16,7 +18,15 @@ from conftest import (
     remove_integration,
 )
 from juju.application import Application
-from oauth_tools import ExternalIdpService, deploy_identity_bundle
+from oauth_tools import (
+    ExternalIdpService,
+    access_application_login_page,
+    complete_auth_code_login,
+    deploy_identity_bundle,
+    get_reverse_proxy_app_url,
+    verify_page_loads,
+)
+from playwright.async_api import BrowserContext, Page
 from pytest_operator.plugin import OpsTest
 
 from constants import (
@@ -168,6 +178,34 @@ async def test_scale_up(
     follower_openfga_data = app_integration_data(ADMIN_SERVICE_APP, "openfga", 1)
     assert follower_openfga_data
     assert follower_openfga_data == leader_openfga_integration_data
+
+
+async def test_oauth_login_with_identity_bundle(
+    ops_test: OpsTest,
+    page: Page,
+    context: BrowserContext,
+    public_traefik_app_name: str,
+    ext_idp_service: ExternalIdpService,
+) -> None:
+    admin_ui_proxy = await get_reverse_proxy_app_url(
+        ops_test, public_traefik_app_name, ADMIN_SERVICE_APP
+    )
+    login_url = os.path.join(admin_ui_proxy, "api/v0/auth")
+    me_url = os.path.join(admin_ui_proxy, "api/v0/auth/me")
+
+    await access_application_login_page(page=page, url=login_url)
+
+    await complete_auth_code_login(page=page, ops_test=ops_test, ext_idp_service=ext_idp_service)
+
+    redirect_url = os.path.join(admin_ui_proxy, "ui/")
+    await verify_page_loads(page=page, url=redirect_url)
+
+    # Validate that the cookies have been set
+    cookies = {c["name"]: c["value"] for c in await context.cookies(me_url)}
+    user = requests.get(me_url, cookies=cookies, verify=False)
+
+    assert user.json()
+    assert user.json()["email"] == ext_idp_service.user_email
 
 
 async def test_remove_integration_openfga(

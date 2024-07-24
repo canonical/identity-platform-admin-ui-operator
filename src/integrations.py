@@ -3,9 +3,12 @@
 
 import json
 import logging
+import secrets
+import socket
 from dataclasses import dataclass
-from typing import Any, Mapping, Optional
-from urllib.parse import urljoin, urlparse
+from os.path import join
+from typing import Any, Mapping, Optional, Union
+from urllib.parse import urlparse
 
 from charms.certificate_transfer_interface.v0.certificate_transfer import (
     CertificateTransferRequires,
@@ -20,15 +23,17 @@ from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 from ops.model import Model
 
 from constants import (
+    ADMIN_SERVICE_PORT,
     CERTIFICATE_TRANSFER_INTEGRATION_NAME,
+    COOKIES_KEY,
     DEFAULT_ACCESS_TOKEN_VERIFICATION_STRATEGY,
-    DEFAULT_BASE_URL,
     OAUTH_CALLBACK_PATH,
     OAUTH_GRANT_TYPES,
     OAUTH_SCOPES,
     PEER_INTEGRATION_NAME,
 )
 from env_vars import EnvVars
+from exceptions import MissingCookieKey
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +43,7 @@ class PeerData:
         self._model = model
         self._app = model.app
 
-    def __getitem__(self, key: str) -> dict:
+    def __getitem__(self, key: str) -> Union[dict, str]:
         if not (peers := self._model.get_relation(PEER_INTEGRATION_NAME)):
             return {}
 
@@ -51,12 +56,29 @@ class PeerData:
 
         peers.data[self._app][key] = json.dumps(value)
 
-    def pop(self, key: str) -> dict:
+    def pop(self, key: str) -> Union[dict, str]:
         if not (peers := self._model.get_relation(PEER_INTEGRATION_NAME)):
             return {}
 
         data = peers.data[self._app].pop(key, None)
         return json.loads(data) if data else {}
+
+    def prepare(self) -> None:
+        if not self._model.unit.is_leader():
+            return
+
+        if not self[COOKIES_KEY]:
+            self[COOKIES_KEY] = secrets.token_hex(16)
+
+    def to_env_vars(self) -> EnvVars:
+        key = self[COOKIES_KEY]
+        if not isinstance(key, str):
+            logger.error("No cookie key found in the databag.")
+            raise MissingCookieKey()
+
+        return {
+            "OAUTH2_AUTH_COOKIES_ENCRYPTION_KEY": key,
+        }
 
 
 @dataclass(frozen=True)
@@ -243,12 +265,12 @@ class IngressData:
     """The data source from the ingress integration."""
 
     is_ready: bool = False
-    url: str = DEFAULT_BASE_URL
+    url: str = f"http://{socket.getfqdn()}:{ADMIN_SERVICE_PORT}"
 
     def to_env_vars(self) -> EnvVars:
         return {
-            "BASE_URL": self.url,
-            "OAUTH2_REDIRECT_URI": urljoin(self.url, OAUTH_CALLBACK_PATH),
+            "CONTEXT_PATH": urlparse(self.url).path,
+            "OAUTH2_REDIRECT_URI": join(self.url, OAUTH_CALLBACK_PATH),
         }
 
     @classmethod
@@ -340,7 +362,7 @@ def load_oauth_client_config(
 ) -> ClientConfig:
     """The temporary factory of the ClientConfig provided to the oauth integration."""
     client = ClientConfig(
-        redirect_uri=urljoin(ingress_url, OAUTH_CALLBACK_PATH),
+        redirect_uri=join(ingress_url, OAUTH_CALLBACK_PATH),
         scope=OAUTH_SCOPES,
         grant_types=OAUTH_GRANT_TYPES,
     )

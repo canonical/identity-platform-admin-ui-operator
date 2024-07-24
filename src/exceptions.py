@@ -8,3 +8,7 @@ class CharmError(Exception):
 
 class PebbleError(CharmError):
     """Error for pebble related operations."""
+
+
+class MissingCookieKey(CharmError):
+    """Error raised when no key is present in the databag."""

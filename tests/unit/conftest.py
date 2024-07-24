@@ -13,7 +13,7 @@ from pytest_mock import MockerFixture
 from charm import IdentityPlatformAdminUIOperatorCharm
 from constants import (
     CERTIFICATE_TRANSFER_INTEGRATION_NAME,
-    DEFAULT_BASE_URL,
+    DEFAULT_CONTEXT_PATH,
     INGRESS_INTEGRATION_NAME,
     PEER_INTEGRATION_NAME,
     WORKLOAD_CONTAINER,
@@ -74,7 +74,7 @@ def mocked_charm_holistic_handler(mocker: MockerFixture) -> MagicMock:
 def mocked_ingress_data(mocker: MockerFixture) -> IngressData:
     mocked = mocker.patch(
         "charm.IngressData.load",
-        return_value=IngressData(is_ready=True, url=DEFAULT_BASE_URL),
+        return_value=IngressData(is_ready=True, url=DEFAULT_CONTEXT_PATH),
     )
     return mocked.return_value
 
@@ -128,6 +128,7 @@ def all_satisfied_conditions(mocker: MockerFixture) -> None:
     mocker.patch("charm.peer_integration_exists", return_value=True)
     mocker.patch("charm.kratos_integration_exists", return_value=True)
     mocker.patch("charm.hydra_integration_exists", return_value=True)
+    mocker.patch("charm.oauth_integration_exists", return_value=True)
     mocker.patch("charm.openfga_integration_exists", return_value=True)
     mocker.patch("charm.ingress_integration_exists", return_value=True)
     mocker.patch("charm.ca_certificate_exists", return_value=True)

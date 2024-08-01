@@ -1,6 +1,0 @@
-options:
-  log_level:
-    description: |
-      Minimum log severity level. Acceptable values are: "info", "debug", "warning", "error"
-    default: "info"
-    type: string

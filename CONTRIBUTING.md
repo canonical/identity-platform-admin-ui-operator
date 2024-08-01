@@ -62,7 +62,7 @@ juju add-model dev
 juju model-config logging-config="<root>=INFO;unit=DEBUG"
 
 # Deploy the charm
-juju deploy ./identity-platform-admin-ui*-amd64.charm --resource oci-image=$(yq eval '.resources.oci-image.upstream-source' metadata.yaml) --trust
+juju deploy ./identity-platform-admin-ui*-amd64.charm --resource oci-image=$(yq eval '.resources.oci-image.upstream-source' charmcraft.yaml) --trust
 ```
 
 ## Canonical Contributor Agreement

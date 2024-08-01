@@ -14,7 +14,7 @@ import yaml
 from juju.application import Application
 from pytest_operator.plugin import OpsTest
 
-METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
+METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
 ADMIN_SERVICE_APP = METADATA["name"]
 ADMIN_SERVICE_IMAGE = METADATA["resources"]["oci-image"]["upstream-source"]
 DB_APP = "postgresql-k8s"

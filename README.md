@@ -24,7 +24,7 @@ juju deploy identity-platform-admin-ui --channel edge --trust
 
 ## Integrations
 
-Please refer to the [`metadata.yaml`](./metadata.yaml) for all required and
+Please refer to the [`charmcraft.yaml`](./charmcraft.yaml) for all required and
 provided integrations.
 
 ### `kratos_info` Integration

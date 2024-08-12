@@ -57,15 +57,6 @@
       "additionalBranchPrefix": "auto-"
     },
     {
-      "groupName": "renovate pre-commit hooks",
-      "matchManagers": ["pre-commit"],
-      "matchSourceUrls": ["https://github.com/renovatebot/pre-commit-hooks"],
-      "matchUpdateTypes": ["major"],
-      "automerge": true,
-      "schedule": ["at any time"],
-      "additionalBranchPrefix": "auto-"
-    },
-    {
       "groupName": "pre-commit hooks",
       "matchManagers": ["pre-commit"],
       "matchUpdateTypes": ["major", "minor", "patch"],

@@ -3,6 +3,7 @@
 # See LICENSE file for licensing details.
 
 """Interface library for sharing kratos info.
+
 This library provides a Python API for both requesting and providing kratos deployment info,
 such as endpoints, namespace and ConfigMap details.
 ## Getting Started
@@ -52,7 +53,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 1
+LIBPATCH = 2
 
 RELATION_NAME = "kratos-info"
 INTERFACE_NAME = "kratos_info"
@@ -93,8 +94,9 @@ class KratosInfoProvider(Object):
         providers_configmap_name: str,
         schemas_configmap_name: str,
         configmaps_namespace: str,
+        mfa_enabled: bool,
     ) -> None:
-        """Updates relation with endpoints and configmaps info."""
+        """Updates relation with endpoints, config and configmaps info."""
         if not self._charm.unit.is_leader():
             return
 
@@ -107,6 +109,7 @@ class KratosInfoProvider(Object):
             "providers_configmap_name": providers_configmap_name,
             "schemas_configmap_name": schemas_configmap_name,
             "configmaps_namespace": configmaps_namespace,
+            "mfa_enabled": str(mfa_enabled),
         }
 
         for relation in relations:

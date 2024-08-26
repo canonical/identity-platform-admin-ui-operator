@@ -5,6 +5,7 @@
 import json
 import logging
 import os
+from pathlib import Path
 from typing import Callable, Optional
 
 import pytest
@@ -15,6 +16,7 @@ from conftest import (
     DB_APP,
     OATHKEEPER_APP,
     OPENFGA_APP,
+    integrate_dependencies,
     remove_integration,
 )
 from juju.application import Application
@@ -45,17 +47,13 @@ logger = logging.getLogger(__name__)
 @pytest.mark.abort_on_fail
 async def test_build_and_deploy(
     ops_test: OpsTest,
-    hydra_app_name: str,
-    kratos_app_name: str,
-    public_traefik_app_name: str,
-    self_signed_certificates_app_name: str,
+    request: pytest.FixtureRequest,
     ext_idp_service: ExternalIdpService,
+    local_charm: Path,
 ) -> None:
-    charm_file = await ops_test.build_charm(".")
-    resources = {"oci-image": ADMIN_SERVICE_IMAGE}
     await ops_test.model.deploy(
-        str(charm_file),
-        resources=resources,
+        str(local_charm),
+        resources={"oci-image": ADMIN_SERVICE_IMAGE},
         application_name=ADMIN_SERVICE_APP,
         trust=True,
         series="jammy",
@@ -85,19 +83,7 @@ async def test_build_and_deploy(
     )
 
     # Integrate with dependencies
-    await ops_test.model.integrate(
-        f"{ADMIN_SERVICE_APP}:kratos-info",
-        kratos_app_name,
-    )
-    await ops_test.model.integrate(
-        f"{ADMIN_SERVICE_APP}:hydra-endpoint-info",
-        hydra_app_name,
-    )
-    await ops_test.model.integrate(ADMIN_SERVICE_APP, OPENFGA_APP)
-    await ops_test.model.integrate(ADMIN_SERVICE_APP, public_traefik_app_name)
-    await ops_test.model.integrate(f"{ADMIN_SERVICE_APP}:oauth", hydra_app_name)
-    await ops_test.model.integrate(ADMIN_SERVICE_APP, self_signed_certificates_app_name)
-    await ops_test.model.integrate(f"{ADMIN_SERVICE_APP}:oathkeeper-info", OATHKEEPER_APP)
+    await integrate_dependencies(ops_test, request)
 
     await ops_test.model.wait_for_idle(
         status="active",
@@ -277,3 +263,41 @@ async def test_scale_down(
 
     assert leader_peer_integration_data
     assert leader_openfga_integration_data
+
+
+async def test_upgrade(
+    ops_test: OpsTest,
+    request: pytest.FixtureRequest,
+    admin_service_application: Application,
+    local_charm: Path,
+) -> None:
+    # remove the current application
+    await ops_test.model.remove_application(
+        app_name=ADMIN_SERVICE_APP,
+        block_until_done=True,
+        destroy_storage=True,
+    )
+
+    # deploy the latest application from CharmHub
+    await ops_test.model.deploy(
+        application_name=ADMIN_SERVICE_APP,
+        entity_url=f"ch:{ADMIN_SERVICE_APP}",
+        channel="edge",
+        series="jammy",
+        trust=True,
+    )
+
+    # integrate with dependencies
+    await integrate_dependencies(ops_test, request)
+
+    # upgrade the charm
+    await admin_service_application.refresh(
+        path=str(local_charm),
+        resources={"oci-image": ADMIN_SERVICE_IMAGE},
+    )
+
+    await ops_test.model.wait_for_idle(
+        apps=[ADMIN_SERVICE_APP],
+        status="active",
+        timeout=5 * 60,
+    )

@@ -18,11 +18,32 @@ METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
 ADMIN_SERVICE_APP = METADATA["name"]
 ADMIN_SERVICE_IMAGE = METADATA["resources"]["oci-image"]["upstream-source"]
 DB_APP = "postgresql-k8s"
-HYDRA_APP = "hydra"
-KRATOS_APP = "kratos"
 OATHKEEPER_APP = "oathkeeper"
 OPENFGA_APP = "openfga-k8s"
-TRAEFIK_APP = "traefik-k8s"
+
+
+async def integrate_dependencies(
+    ops_test: OpsTest,
+    request: pytest.FixtureRequest,
+) -> None:
+    kratos_app_name = request.getfixturevalue("kratos_app_name")
+    hydra_app_name = request.getfixturevalue("hydra_app_name")
+    public_ingress_name = request.getfixturevalue("public_traefik_app_name")
+    self_signed_cert_app_name = request.getfixturevalue("self_signed_certificates_app_name")
+
+    await ops_test.model.integrate(
+        f"{ADMIN_SERVICE_APP}:kratos-info",
+        kratos_app_name,
+    )
+    await ops_test.model.integrate(
+        f"{ADMIN_SERVICE_APP}:hydra-endpoint-info",
+        hydra_app_name,
+    )
+    await ops_test.model.integrate(ADMIN_SERVICE_APP, OPENFGA_APP)
+    await ops_test.model.integrate(ADMIN_SERVICE_APP, public_ingress_name)
+    await ops_test.model.integrate(f"{ADMIN_SERVICE_APP}:oauth", hydra_app_name)
+    await ops_test.model.integrate(ADMIN_SERVICE_APP, self_signed_cert_app_name)
+    await ops_test.model.integrate(f"{ADMIN_SERVICE_APP}:oathkeeper-info", OATHKEEPER_APP)
 
 
 async def get_unit_data(ops_test: OpsTest, unit_name: str) -> dict:
@@ -105,6 +126,11 @@ def admin_service_application(ops_test: OpsTest) -> Application:
 def admin_service_version() -> str:
     matched = re.search(r"v(?P<version>\d+\.\d+\.\d+)", ADMIN_SERVICE_IMAGE)
     return matched.group("version") if matched else ""
+
+
+@pytest_asyncio.fixture(scope="module")
+async def local_charm(ops_test: OpsTest) -> Path:
+    return await ops_test.build_charm(".")
 
 
 @asynccontextmanager

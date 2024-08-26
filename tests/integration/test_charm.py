@@ -109,29 +109,29 @@ async def test_build_and_deploy(
     )
 
 
-def test_kratos_integration(leader_kratos_integration_data: Optional[dict]) -> None:
+async def test_kratos_integration(leader_kratos_integration_data: Optional[dict]) -> None:
     assert leader_kratos_integration_data
     assert all(leader_kratos_integration_data.values())
 
 
-def test_hydra_endpoint_integration(
+async def test_hydra_endpoint_integration(
     leader_hydra_endpoint_integration_data: Optional[dict],
 ) -> None:
     assert leader_hydra_endpoint_integration_data
     assert all(leader_hydra_endpoint_integration_data.values())
 
 
-def test_openfga_integration(leader_openfga_integration_data: Optional[dict]) -> None:
+async def test_openfga_integration(leader_openfga_integration_data: Optional[dict]) -> None:
     assert leader_openfga_integration_data
     assert all(leader_openfga_integration_data.values())
 
 
-def test_oathkeeper_integration(leader_oathkeeper_integration_data: Optional[dict]) -> None:
+async def test_oathkeeper_integration(leader_oathkeeper_integration_data: Optional[dict]) -> None:
     assert leader_oathkeeper_integration_data
     assert all(leader_oathkeeper_integration_data.values())
 
 
-def test_ingress_integration(
+async def test_ingress_integration(
     ops_test: OpsTest, leader_ingress_integration_data: Optional[dict]
 ) -> None:
     assert leader_ingress_integration_data
@@ -141,12 +141,12 @@ def test_ingress_integration(
     assert f"{ops_test.model_name}-{ADMIN_SERVICE_APP}" in data["url"]
 
 
-def test_oauth_integration(leader_oauth_integration_data: Optional[dict]) -> None:
+async def test_oauth_integration(leader_oauth_integration_data: Optional[dict]) -> None:
     assert leader_oauth_integration_data
     assert all(leader_oauth_integration_data.values())
 
 
-def test_peer_integration(
+async def test_peer_integration(
     leader_peer_integration_data: Optional[dict],
     admin_service_version: str,
 ) -> None:
@@ -175,11 +175,11 @@ async def test_scale_up(
         wait_for_exact_units=target_unit_number,
     )
 
-    follower_peer_data = app_integration_data(ADMIN_SERVICE_APP, ADMIN_SERVICE_APP, 1)
+    follower_peer_data = await app_integration_data(ADMIN_SERVICE_APP, ADMIN_SERVICE_APP, 1)
     assert follower_peer_data
     assert leader_peer_integration_data == follower_peer_data
 
-    follower_openfga_data = app_integration_data(ADMIN_SERVICE_APP, "openfga", 1)
+    follower_openfga_data = await app_integration_data(ADMIN_SERVICE_APP, "openfga", 1)
     assert follower_openfga_data
     assert follower_openfga_data == leader_openfga_integration_data
 

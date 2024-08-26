@@ -4,12 +4,12 @@
 
 import functools
 import re
-import subprocess
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncGenerator, Callable, Optional
 
 import pytest
+import pytest_asyncio
 import yaml
 from juju.application import Application
 from pytest_operator.plugin import OpsTest
@@ -25,79 +25,75 @@ OPENFGA_APP = "openfga-k8s"
 TRAEFIK_APP = "traefik-k8s"
 
 
-def get_unit_data(unit_name: str, model_name: str) -> dict:
-    res = subprocess.run(
-        ["juju", "show-unit", unit_name, "-m", model_name],
-        check=True,
-        text=True,
-        capture_output=True,
-    )
-    cmd_output = yaml.safe_load(res.stdout)
+async def get_unit_data(ops_test: OpsTest, unit_name: str) -> dict:
+    show_unit_cmd = f"show-unit {unit_name}".split()
+    _, stdout, _ = await ops_test.juju(*show_unit_cmd)
+    cmd_output = yaml.safe_load(stdout)
     return cmd_output[unit_name]
 
 
-def get_integration_data(
-    model_name: str,
-    app_name: str,
-    integration_name: str,
-    unit_num: int = 0,
+async def get_integration_data(
+    ops_test: OpsTest, app_name: str, integration_name: str, unit_num: int = 0
 ) -> Optional[dict]:
-    unit_data = get_unit_data(f"{app_name}/{unit_num}", model_name)
+    data = await get_unit_data(ops_test, f"{app_name}/{unit_num}")
     return next(
         (
             integration
-            for integration in unit_data["relation-info"]
+            for integration in data["relation-info"]
             if integration["endpoint"] == integration_name
         ),
         None,
     )
 
 
-def get_app_integration_data(
-    model_name: str, app_name: str, integration_name: str, unit_num: int = 0
+async def get_app_integration_data(
+    ops_test: OpsTest,
+    app_name: str,
+    integration_name: str,
+    unit_num: int = 0,
 ) -> Optional[dict]:
-    data = get_integration_data(model_name, app_name, integration_name, unit_num)
+    data = await get_integration_data(ops_test, app_name, integration_name, unit_num)
     return data["application-data"] if data else None
 
 
-@pytest.fixture
-def app_integration_data(ops_test: OpsTest) -> Callable:
-    return functools.partial(get_app_integration_data, ops_test.model_name)
+@pytest_asyncio.fixture
+async def app_integration_data(ops_test: OpsTest) -> Callable:
+    return functools.partial(get_app_integration_data, ops_test)
 
 
-@pytest.fixture
-def leader_kratos_integration_data(app_integration_data: Callable) -> Optional[dict]:
-    return app_integration_data(ADMIN_SERVICE_APP, "kratos-info")
+@pytest_asyncio.fixture
+async def leader_kratos_integration_data(app_integration_data: Callable) -> Optional[dict]:
+    return await app_integration_data(ADMIN_SERVICE_APP, "kratos-info")
 
 
-@pytest.fixture
-def leader_hydra_endpoint_integration_data(app_integration_data: Callable) -> Optional[dict]:
-    return app_integration_data(ADMIN_SERVICE_APP, "hydra-endpoint-info")
+@pytest_asyncio.fixture
+async def leader_hydra_endpoint_integration_data(app_integration_data: Callable) -> Optional[dict]:
+    return await app_integration_data(ADMIN_SERVICE_APP, "hydra-endpoint-info")
 
 
-@pytest.fixture
-def leader_openfga_integration_data(app_integration_data: Callable) -> Optional[dict]:
-    return app_integration_data(ADMIN_SERVICE_APP, "openfga")
+@pytest_asyncio.fixture
+async def leader_openfga_integration_data(app_integration_data: Callable) -> Optional[dict]:
+    return await app_integration_data(ADMIN_SERVICE_APP, "openfga")
 
 
-@pytest.fixture
-def leader_oathkeeper_integration_data(app_integration_data: Callable) -> Optional[dict]:
-    return app_integration_data(ADMIN_SERVICE_APP, "oathkeeper-info")
+@pytest_asyncio.fixture
+async def leader_oathkeeper_integration_data(app_integration_data: Callable) -> Optional[dict]:
+    return await app_integration_data(ADMIN_SERVICE_APP, "oathkeeper-info")
 
 
-@pytest.fixture
-def leader_ingress_integration_data(app_integration_data: Callable) -> Optional[dict]:
-    return app_integration_data(ADMIN_SERVICE_APP, "ingress")
+@pytest_asyncio.fixture
+async def leader_ingress_integration_data(app_integration_data: Callable) -> Optional[dict]:
+    return await app_integration_data(ADMIN_SERVICE_APP, "ingress")
 
 
-@pytest.fixture
-def leader_peer_integration_data(app_integration_data: Callable) -> Optional[dict]:
-    return app_integration_data(ADMIN_SERVICE_APP, ADMIN_SERVICE_APP)
+@pytest_asyncio.fixture
+async def leader_peer_integration_data(app_integration_data: Callable) -> Optional[dict]:
+    return await app_integration_data(ADMIN_SERVICE_APP, ADMIN_SERVICE_APP)
 
 
-@pytest.fixture
-def leader_oauth_integration_data(app_integration_data: Callable) -> Optional[dict]:
-    return app_integration_data(ADMIN_SERVICE_APP, "oauth")
+@pytest_asyncio.fixture
+async def leader_oauth_integration_data(app_integration_data: Callable) -> Optional[dict]:
+    return await app_integration_data(ADMIN_SERVICE_APP, "oauth")
 
 
 @pytest.fixture

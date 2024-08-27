@@ -27,6 +27,7 @@ def harness() -> Generator[Harness, None, None]:
     harness.set_model_name("testing")
     harness.set_leader(True)
     harness.set_can_connect(WORKLOAD_CONTAINER, True)
+    harness.add_network("10.0.0.10")
     harness.begin()
     yield harness
     harness.cleanup()

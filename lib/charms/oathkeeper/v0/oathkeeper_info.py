@@ -48,7 +48,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 1
+LIBPATCH = 2
 
 RELATION_NAME = "oathkeeper-info"
 INTERFACE_NAME = "oathkeeper_info"
@@ -70,7 +70,7 @@ class OathkeeperInfoProvider(Object):
 
     on = OathkeeperInfoProviderEvents()
 
-    def __init__(self, charm: CharmBase, relation_name: str = RELATION_NAME):
+    def __init__(self, charm: CharmBase, relation_name: str = RELATION_NAME) -> None:
         super().__init__(charm, relation_name)
 
         self._charm = charm
@@ -128,7 +128,7 @@ class OathkeeperInfoRelationDataMissingError(OathkeeperInfoRelationError):
 class OathkeeperInfoRequirer(Object):
     """Requirer side of the oathkeeper-info relation."""
 
-    def __init__(self, charm: CharmBase, relation_name: str = RELATION_NAME):
+    def __init__(self, charm: CharmBase, relation_name: str = RELATION_NAME) -> None:
         super().__init__(charm, relation_name)
         self._charm = charm
         self._relation_name = relation_name

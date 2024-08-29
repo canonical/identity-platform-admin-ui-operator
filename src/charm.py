@@ -10,17 +10,10 @@ import logging
 from functools import cached_property
 from typing import Any
 
-from charms.certificate_transfer_interface.v0.certificate_transfer import (
-    CertificateAvailableEvent,
-    CertificateRemovedEvent,
-    CertificateTransferRequires,
-)
 from charms.certificate_transfer_interface.v1.certificate_transfer import (
     CertificatesAvailableEvent,
     CertificatesRemovedEvent,
-)
-from charms.certificate_transfer_interface.v1.certificate_transfer import (
-    CertificateTransferRequires as V1CertificateTransferRequires,
+    CertificateTransferRequires,
 )
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.hydra.v0.hydra_endpoints import HydraEndpointsRequirer
@@ -146,12 +139,7 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         self.oauth_requirer = OAuthRequirer(self, oauth_client_config, OAUTH_INTEGRATION_NAME)
         self.oauth_integration = OAuthIntegration(self.oauth_requirer)
 
-        self.certificate_transfer_requirer_v0 = CertificateTransferRequires(
-            self,
-            CERTIFICATE_TRANSFER_INTEGRATION_NAME,
-        )
-
-        self.certificate_transfer_requirer_v1 = V1CertificateTransferRequires(
+        self.certificate_transfer_requirer = CertificateTransferRequires(
             self,
             CERTIFICATE_TRANSFER_INTEGRATION_NAME,
         )
@@ -232,19 +220,11 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             self._on_oauth_info_changed,
         )
         self.framework.observe(
-            self.certificate_transfer_requirer_v0.on.certificate_available,
+            self.certificate_transfer_requirer.on.certificate_set_updated,
             self._on_certificate_changed,
         )
         self.framework.observe(
-            self.certificate_transfer_requirer_v0.on.certificate_removed,
-            self._on_certificate_changed,
-        )
-        self.framework.observe(
-            self.certificate_transfer_requirer_v1.on.certificate_set_updated,
-            self._on_certificate_changed,
-        )
-        self.framework.observe(
-            self.certificate_transfer_requirer_v1.on.certificates_removed,
+            self.certificate_transfer_requirer.on.certificates_removed,
             self._on_certificate_changed,
         )
 
@@ -321,10 +301,7 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
 
     def _on_certificate_changed(
         self,
-        event: CertificateAvailableEvent
-        | CertificateRemovedEvent
-        | CertificatesAvailableEvent
-        | CertificatesRemovedEvent,
+        event: CertificatesAvailableEvent | CertificatesRemovedEvent,
     ) -> None:
         # Delegate to the holistic method for managing TLS certificates in container's filesystem
         self._holistic_handler(event)
@@ -392,11 +369,7 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
 
     @cached_property
     def _ca_bundle(self) -> str:
-        # which requirer we pass doesn't matter as all relations of that type will be picked nonetheless
-        # if self.certificate_transfer_requirer_v1.get_all_certificates():
-        return TLSCertificates.load(self.certificate_transfer_requirer_v1).ca_bundle
-
-        # return TLSCertificates.load(self.certificate_transfer_requirer_v0).ca_bundle
+        return TLSCertificates.load(self.certificate_transfer_requirer).ca_bundle
 
     @property
     def _pebble_layer(self) -> Layer:

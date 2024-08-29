@@ -10,7 +10,9 @@ from os.path import join
 from typing import Any, Mapping, Optional, Union
 from urllib.parse import urlparse
 
-from charms.certificate_transfer_interface.v1.certificate_transfer import CertificateTransferRequires
+from charms.certificate_transfer_interface.v1.certificate_transfer import (
+    CertificateTransferRequires,
+)
 from charms.hydra.v0.hydra_endpoints import HydraEndpointsRequirer
 from charms.hydra.v0.oauth import ClientConfig, OAuthRequirer
 from charms.kratos.v0.kratos_info import KratosInfoRequirer
@@ -333,14 +335,11 @@ class TLSCertificates:
     ca_bundle: str
 
     @classmethod
-    def load(
-        cls, requirer: CertificateTransferRequires
-    ) -> "TLSCertificates":
+    def load(cls, requirer: CertificateTransferRequires) -> "TLSCertificates":
         """Fetch the CA certificates from all "receive-ca-cert" integrations.
 
         Compose the trusted CA certificates in /etc/ssl/certs/ca-certificates.crt.
         """
-        
         # deal with v1 relations
         ca_certs = requirer.get_all_certificates()
 
@@ -354,7 +353,7 @@ class TLSCertificates:
                 integration.data[unit]["ca"]
                 for unit in integration.units
                 if "ca" in integration.data[unit]
-            }   
+            }
             ca_certs.update(ca)
 
         ca_bundle = "\n".join(ca_certs)

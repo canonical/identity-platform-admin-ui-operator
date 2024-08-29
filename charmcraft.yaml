@@ -103,3 +103,5 @@ parts:
   charm:
     charm-binary-python-packages:
       - jsonschema
+      - "pydantic>=2"
+

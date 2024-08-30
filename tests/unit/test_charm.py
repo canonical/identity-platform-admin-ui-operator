@@ -353,19 +353,15 @@ class TestCertificateAvailableEvent:
         mocked_workload_service: MagicMock,
         mocked_charm_holistic_handler: MagicMock,
     ) -> None:
-        harness.charm.certificate_transfer_requirer.on.certificate_available.emit(
-            "certificate",
-            "ca",
-            ["certificate", "ca"],
+        harness.charm.certificate_transfer_requirer.on.certificate_set_updated.emit(
+            {"certificate-1", "certificate-2"},
             certificate_transfer_integration,
         )
 
         mocked_charm_holistic_handler.assert_called_once()
         event = mocked_charm_holistic_handler.call_args.args[0]
         assert event.snapshot() == {
-            "certificate": "certificate",
-            "ca": "ca",
-            "chain": ["certificate", "ca"],
+            "certificates": {"certificate-1", "certificate-2"},
             "relation_id": certificate_transfer_integration,
         }
 
@@ -378,7 +374,7 @@ class TestCertificateRemovedEvent:
         mocked_workload_service: MagicMock,
         mocked_charm_holistic_handler: MagicMock,
     ) -> None:
-        harness.charm.certificate_transfer_requirer.on.certificate_removed.emit(
+        harness.charm.certificate_transfer_requirer.on.certificates_removed.emit(
             certificate_transfer_integration,
         )
 

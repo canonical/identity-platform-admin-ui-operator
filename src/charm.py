@@ -10,9 +10,9 @@ import logging
 from functools import cached_property
 from typing import Any
 
-from charms.certificate_transfer_interface.v0.certificate_transfer import (
-    CertificateAvailableEvent,
-    CertificateRemovedEvent,
+from charms.certificate_transfer_interface.v1.certificate_transfer import (
+    CertificatesAvailableEvent,
+    CertificatesRemovedEvent,
     CertificateTransferRequires,
 )
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
@@ -140,7 +140,8 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         self.oauth_integration = OAuthIntegration(self.oauth_requirer)
 
         self.certificate_transfer_requirer = CertificateTransferRequires(
-            self, CERTIFICATE_TRANSFER_INTEGRATION_NAME
+            self,
+            CERTIFICATE_TRANSFER_INTEGRATION_NAME,
         )
 
         self.tracing_requirer = TracingEndpointRequirer(
@@ -219,11 +220,11 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             self._on_oauth_info_changed,
         )
         self.framework.observe(
-            self.certificate_transfer_requirer.on.certificate_available,
+            self.certificate_transfer_requirer.on.certificate_set_updated,
             self._on_certificate_changed,
         )
         self.framework.observe(
-            self.certificate_transfer_requirer.on.certificate_removed,
+            self.certificate_transfer_requirer.on.certificates_removed,
             self._on_certificate_changed,
         )
 
@@ -299,7 +300,8 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         self._holistic_handler(event)
 
     def _on_certificate_changed(
-        self, event: CertificateAvailableEvent | CertificateRemovedEvent
+        self,
+        event: CertificatesAvailableEvent | CertificatesRemovedEvent,
     ) -> None:
         # Delegate to the holistic method for managing TLS certificates in container's filesystem
         self._holistic_handler(event)

@@ -27,7 +27,7 @@ from charms.openfga_k8s.v1.openfga import (
     OpenFGAStoreRemovedEvent,
 )
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
-from charms.tempo_k8s.v0.tracing import TracingEndpointRequirer
+from charms.tempo_k8s.v2.tracing import TracingEndpointRequirer
 from charms.traefik_k8s.v2.ingress import (
     IngressPerAppReadyEvent,
     IngressPerAppRequirer,
@@ -147,6 +147,7 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         self.tracing_requirer = TracingEndpointRequirer(
             self,
             relation_name=TEMPO_TRACING_INTEGRATION_NAME,
+            protocols=["otlp_grpc", "otlp_http"],
         )
 
         self.metrics_endpoint = MetricsEndpointProvider(

@@ -18,7 +18,7 @@ from charms.hydra.v0.oauth import ClientConfig, OAuthRequirer
 from charms.kratos.v0.kratos_info import KratosInfoRequirer
 from charms.oathkeeper.v0.oathkeeper_info import OathkeeperInfoRequirer
 from charms.openfga_k8s.v1.openfga import OpenFGARequires
-from charms.tempo_k8s.v0.tracing import TracingEndpointRequirer
+from charms.tempo_k8s.v2.tracing import TracingEndpointRequirer
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 from ops.model import Model
 
@@ -255,8 +255,8 @@ class TracingData:
 
         return TracingData(
             is_ready=is_ready,
-            http_endpoint=requirer.otlp_http_endpoint(),  # type: ignore[arg-type]
-            grpc_endpoint=requirer.otlp_grpc_endpoint(),  # type: ignore[arg-type]
+            http_endpoint=requirer.get_endpoint("otlp_http"),  # type: ignore[arg-type]
+            grpc_endpoint=requirer.get_endpoint("otlp_grpc"),  # type: ignore[arg-type]
         )
 
 

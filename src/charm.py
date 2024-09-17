@@ -35,6 +35,7 @@ from charms.traefik_k8s.v2.ingress import (
 )
 from ops import EventBase
 from ops.charm import (
+    ActionEvent,
     CharmBase,
     CollectStatusEvent,
     ConfigChangedEvent,
@@ -46,6 +47,7 @@ from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 from ops.pebble import Layer
 
+from cli import CommandLine
 from configs import CharmConfig
 from constants import (
     ADMIN_SERVICE_PORT,
@@ -105,6 +107,7 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         super().__init__(*args)
 
         self._container = self.unit.get_container(WORKLOAD_CONTAINER)
+        self._cli = CommandLine(self._container)
 
         self.peer_data = PeerData(self.model)
         self._pebble_service = PebbleService(self.unit)
@@ -232,6 +235,11 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         self.framework.observe(
             self.loki_consumer.on.promtail_digest_error,
             self._promtail_error,
+        )
+
+        self.framework.observe(
+            self.on.create_identity_action,
+            self._on_create_identity_action,
         )
 
     def _on_admin_ui_pebble_ready(self, event: WorkloadEvent) -> None:
@@ -375,7 +383,7 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
     @property
     def _pebble_layer(self) -> Layer:
         openfga_integration_data = self.openfga_integration.openfga_integration_data
-        openfga_model_data = OpenFGAModelData.load(self.peer_data[self._workload_service.version])
+        openfga_model_data = OpenFGAModelData.load(self.peer_data[self._workload_service.version])  # type: ignore[arg-type]
         kratos_data = KratosData.load(self.kratos_info_requirer)
         hydra_data = HydraData.load(self.hydra_endpoints_requirer)
         ingress_data = IngressData.load(self.ingress_requirer)
@@ -399,6 +407,18 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
 
     def _promtail_error(self, event: PromtailDigestError) -> None:
         logger.error(event.message)
+
+    def _on_create_identity_action(self, event: ActionEvent) -> None:
+        traits = event.params["traits"]
+        schema_id = event.params["schema"]
+        password = event.params["password"]
+
+        if not (res := self._cli.create_identity(traits, schema_id=schema_id, password=password)):
+            event.fail("Failed to create the identity. Please check the juju logs")
+            return
+
+        event.log(f"Successfully created the identity: {res}")
+        event.set_results({"identity-id": res})
 
 
 if __name__ == "__main__":

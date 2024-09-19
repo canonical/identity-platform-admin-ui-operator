@@ -3,7 +3,7 @@
 #
 # Learn more about testing at: https://juju.is/docs/sdk/testing
 
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, Mock, PropertyMock, patch
 
 import pytest
 from ops import ActiveStatus, BlockedStatus, StatusBase, WaitingStatus
@@ -515,6 +515,10 @@ class TestCollectStatusEvent:
         all_satisfied_conditions: MagicMock,
     ) -> None:
         with (
+            patch(
+                "charm.IdentityPlatformAdminUIOperatorCharm._pebble_layer",
+                new_callable=PropertyMock,
+            ),
             patch("charm.PebbleService.plan", side_effect=PebbleError),
             patch("charm.NOOP_CONDITIONS", new=[Mock(return_value=True)]),
             patch("charm.EVENT_DEFER_CONDITIONS", new=[Mock(return_value=True)]),

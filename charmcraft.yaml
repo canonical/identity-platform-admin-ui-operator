@@ -25,7 +25,7 @@ resources:
   oci-image:
     type: oci-image
     description: Identity Platform Admin UI oci-image
-    upstream-source: ghcr.io/canonical/identity-platform-admin-ui:v1.14.0
+    upstream-source: ghcr.io/canonical/identity-platform-admin-ui:v1.18.0
 
 requires:
   hydra-endpoint-info:
@@ -91,6 +91,31 @@ config:
       default: "info"
       type: string
 
+actions:
+  create-identity:
+    description: Create an identity according to the specified identity schema.
+    params:
+      schema:
+        type: string
+        description: The identity schema Id.
+      password:
+        type: string
+        description: The password of the identity.
+      traits:
+        type: object
+        description: The traits of the identity following the identity schema.
+        properties:
+          email:
+            type: string
+        required:
+          - email
+        additionalProperties: true
+    required:
+      - schema
+      - traits
+    additionalProperties: false
+
+
 bases:
   - build-on:
     - name: ubuntu
@@ -104,4 +129,3 @@ parts:
     charm-binary-python-packages:
       - jsonschema
       - "pydantic>=2"
-

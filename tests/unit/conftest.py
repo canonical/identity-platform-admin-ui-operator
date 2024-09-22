@@ -133,5 +133,6 @@ def all_satisfied_conditions(mocker: MockerFixture) -> None:
     mocker.patch("charm.openfga_integration_exists", return_value=True)
     mocker.patch("charm.ingress_integration_exists", return_value=True)
     mocker.patch("charm.ca_certificate_exists", return_value=True)
+    mocker.patch("charm.smtp_integration_exists", return_value=True)
     mocker.patch("charm.openfga_store_readiness", return_value=True)
     mocker.patch("charm.openfga_model_readiness", return_value=True)

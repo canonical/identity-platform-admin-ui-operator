@@ -15,6 +15,7 @@ from constants import (
     OAUTH_INTEGRATION_NAME,
     OPENFGA_INTEGRATION_NAME,
     PEER_INTEGRATION_NAME,
+    SMTP_INTEGRATION_NAME,
     WORKLOAD_CONTAINER,
 )
 
@@ -53,6 +54,7 @@ openfga_integration_exists = integration_existence(OPENFGA_INTEGRATION_NAME)
 ingress_integration_exists = integration_existence(INGRESS_INTEGRATION_NAME)
 oauth_integration_exists = integration_existence(OAUTH_INTEGRATION_NAME)
 cert_transfer_integration_exists = integration_existence(CERTIFICATE_TRANSFER_INTEGRATION_NAME)
+smtp_integration_exists = integration_existence(SMTP_INTEGRATION_NAME)
 
 
 def container_connectivity(charm: CharmBase) -> bool:

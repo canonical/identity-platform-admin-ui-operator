@@ -14,12 +14,16 @@ from conftest import (
     ADMIN_SERVICE_APP,
     ADMIN_SERVICE_IMAGE,
     DB_APP,
+    MAIL_APP,
+    MAIL_SMTP_PORT,
     OATHKEEPER_APP,
     OPENFGA_APP,
+    SMTP_INTEGRATOR_APP,
     integrate_dependencies,
     remove_integration,
 )
 from juju.application import Application
+from juju.unit import Unit
 from oauth_tools import (
     ExternalIdpService,
     access_application_login_page,
@@ -50,6 +54,7 @@ async def test_build_and_deploy(
     request: pytest.FixtureRequest,
     ext_idp_service: ExternalIdpService,
     local_charm: Path,
+    mail_deployment: None,
 ) -> None:
     await ops_test.model.deploy(
         str(local_charm),
@@ -80,6 +85,17 @@ async def test_build_and_deploy(
         channel="latest/edge",
         series="jammy",
         trust=True,
+    )
+
+    await ops_test.model.deploy(
+        entity_url=SMTP_INTEGRATOR_APP,
+        channel="latest/stable",
+        series="jammy",
+        trust=True,
+        config={
+            "host": f"{MAIL_APP}.{ops_test.model_name}.svc.cluster.local",
+            "port": str(MAIL_SMTP_PORT),
+        },
     )
 
     # Integrate with dependencies
@@ -141,6 +157,31 @@ async def test_peer_integration(
 
     openfga_model = json.loads(leader_peer_integration_data[admin_service_version])
     assert openfga_model["openfga_model_id"]
+
+
+async def test_smtp_integration(
+    ops_test: OpsTest, leader_smtp_integration_data: Optional[dict]
+) -> None:
+    assert leader_smtp_integration_data
+    assert (
+        leader_smtp_integration_data["host"]
+        == f"{MAIL_APP}.{ops_test.model_name}.svc.cluster.local"
+    )
+    assert leader_smtp_integration_data["port"] == str(MAIL_SMTP_PORT)
+
+
+async def test_create_identity_action(admin_service_unit: Unit) -> None:
+    action = await admin_service_unit.run_action(
+        "create-identity",
+        **{
+            "schema": "social_user_v0",
+            "password": "password",
+            "traits": {"email": "user@canonical.com"},
+        },
+    )
+
+    res = (await action.wait()).results
+    assert res["identity-id"]
 
 
 async def test_scale_up(

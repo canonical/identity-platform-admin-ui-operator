@@ -16,6 +16,7 @@ from constants import (
     OAUTH_INTEGRATION_NAME,
     OPENFGA_INTEGRATION_NAME,
     PEER_INTEGRATION_NAME,
+    SMTP_INTEGRATION_NAME,
     WORKLOAD_CONTAINER,
 )
 from exceptions import PebbleError
@@ -487,6 +488,11 @@ class TestCollectStatusEvent:
                 "ca_certificate_exists",
                 BlockedStatus,
                 "Missing certificate transfer integration with oauth provider",
+            ),
+            (
+                "smtp_integration_exists",
+                BlockedStatus,
+                f"Missing integration {SMTP_INTEGRATION_NAME}",
             ),
             ("openfga_store_readiness", WaitingStatus, "OpenFGA store is not ready yet"),
             ("openfga_model_readiness", WaitingStatus, "OpenFGA model is not ready yet"),

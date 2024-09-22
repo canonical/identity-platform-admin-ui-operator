@@ -18,6 +18,7 @@ from charms.hydra.v0.oauth import ClientConfig, OAuthRequirer
 from charms.kratos.v0.kratos_info import KratosInfoRequirer
 from charms.oathkeeper.v0.oathkeeper_info import OathkeeperInfoRequirer
 from charms.openfga_k8s.v1.openfga import OpenFGARequires
+from charms.smtp_integrator.v0.smtp import AuthType, SmtpRequires
 from charms.tempo_k8s.v2.tracing import TracingEndpointRequirer
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 from ops.model import Model
@@ -359,6 +360,41 @@ class TLSCertificates:
         ca_bundle = "\n".join(ca_certs)
 
         return cls(ca_bundle=ca_bundle)
+
+
+@dataclass(frozen=True, slots=True)
+class SmtpProviderData:
+    host: str = "localhost"
+    port: int = 1025
+    username: str = ""
+    password: str = ""
+
+    def to_env_vars(self) -> EnvVars:
+        return {
+            "MAIL_HOST": self.host,
+            "MAIL_PORT": str(self.port),
+            "MAIL_USERNAME": self.username,
+            "MAIL_PASSWORD": self.password,
+        }
+
+    @classmethod
+    def load(cls, requirer: SmtpRequires) -> "SmtpProviderData":
+        if not (data := requirer.get_relation_data()):
+            return cls()
+
+        if data.auth_type in (AuthType.NONE, AuthType.NOT_PROVIDED):
+            return cls(
+                host=data.host,
+                port=data.port,
+            )
+
+        password_secret = requirer.model.get_secret(id=data.password_id)
+        return cls(
+            host=data.host,
+            port=data.port,
+            username=data.user or "",
+            password=password_secret.get_content().get("password", ""),
+        )
 
 
 # TODO(dushu) Remove when audience issue is fixed in login-ui

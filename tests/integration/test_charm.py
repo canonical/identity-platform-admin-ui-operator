@@ -306,7 +306,9 @@ async def test_scale_down(
     assert leader_openfga_integration_data
 
 
-@pytest.mark.skip(reason="the new integration causes failure")
+@pytest.mark.skip(
+    reason="temporarily disabled since the charm in CharmHub does not have the smtp integration"
+)
 async def test_upgrade(
     ops_test: OpsTest,
     request: pytest.FixtureRequest,

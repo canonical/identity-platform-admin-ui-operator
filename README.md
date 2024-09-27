@@ -67,10 +67,33 @@ juju integrate identity-platform-admin-ui:oauth hydra
 
 If the `oauth` integration is built, please also integrate with a CA issuer
 charmed operator,
-e.g.[elf-signed-certificats` operator](https://github.com/canonical/self-signed-certificates-operator):
+e.g. [`self-signed-certificates` operator](https://github.com/canonical/self-signed-certificates-operator):
 
 ```shell
 juju integrate identity-platform-admin-ui:receive-ca-cert self-signed-certificates
+```
+
+### `smtp` integration
+
+An `smtp` integration is necessary for `identity-platform-admin-ui` service
+to be fully functional:
+
+```shell
+juju config smtp-integrator host=<smtp-server-host> port=<smtp-port>
+
+juju integrate identity-platform-admin-ui:smtp smtp-integrator:smtp
+```
+
+## Actions
+
+The `identity-platform-admin-ui` charmed operator offers the following Juju actions.
+
+### `create-identity`
+
+The `create-identity` action initiates the user invitation flow.
+
+```shell
+juju run identity-platform-admin-ui/0 create-identity schema=<identity-schema-id> traits.email=<email> password=<password>
 ```
 
 ## Security

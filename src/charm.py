@@ -27,6 +27,7 @@ from charms.openfga_k8s.v1.openfga import (
     OpenFGAStoreRemovedEvent,
 )
 from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
+from charms.smtp_integrator.v0.smtp import SmtpDataAvailableEvent, SmtpRequires
 from charms.tempo_k8s.v2.tracing import TracingEndpointRequirer
 from charms.traefik_k8s.v2.ingress import (
     IngressPerAppReadyEvent,
@@ -65,6 +66,7 @@ from constants import (
     OPENFGA_STORE_NAME,
     PEER_INTEGRATION_NAME,
     PROMETHEUS_SCRAPE_INTEGRATION_NAME,
+    SMTP_INTEGRATION_NAME,
     TEMPO_TRACING_INTEGRATION_NAME,
     WORKLOAD_CONTAINER,
 )
@@ -78,6 +80,7 @@ from integrations import (
     OpenFGAIntegration,
     OpenFGAModelData,
     PeerData,
+    SmtpProviderData,
     TLSCertificates,
     TracingData,
     load_oauth_client_config,
@@ -97,6 +100,7 @@ from utils import (
     openfga_model_readiness,
     openfga_store_readiness,
     peer_integration_exists,
+    smtp_integration_exists,
 )
 
 logger = logging.getLogger(__name__)
@@ -177,6 +181,8 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             self, relation_name=GRAFANA_DASHBOARD_INTEGRATION_NAME
         )
 
+        self.smtp_requirer = SmtpRequires(self)
+
         self.framework.observe(self.on.admin_ui_pebble_ready, self._on_admin_ui_pebble_ready)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.upgrade_charm, self._on_upgrade_charm)
@@ -230,6 +236,10 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         self.framework.observe(
             self.certificate_transfer_requirer.on.certificates_removed,
             self._on_certificate_changed,
+        )
+        self.framework.observe(
+            self.smtp_requirer.on.smtp_data_available,
+            self._on_smtp_data_available,
         )
 
         self.framework.observe(
@@ -315,6 +325,9 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         # Delegate to the holistic method for managing TLS certificates in container's filesystem
         self._holistic_handler(event)
 
+    def _on_smtp_data_available(self, event: SmtpDataAvailableEvent) -> None:
+        self._holistic_handler(event)
+
     def _on_collect_status(self, event: CollectStatusEvent) -> None:  # noqa: C901
         """The central management of the charm operator's status."""
         if not container_connectivity(self):
@@ -344,6 +357,9 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             event.add_status(
                 BlockedStatus("Missing certificate transfer integration with oauth provider")
             )
+
+        if not smtp_integration_exists(self):
+            event.add_status(BlockedStatus(f"Missing integration {SMTP_INTEGRATION_NAME}"))
 
         if not openfga_store_readiness(self):
             event.add_status(WaitingStatus("OpenFGA store is not ready yet"))
@@ -390,6 +406,7 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         oathkeeper_data = OathkeeperData.load(self.oathkeeper_info_requirer)
         oauth_data = self.oauth_integration.oauth_provider_data
         tracing_data = TracingData.load(self.tracing_requirer)
+        smtp_data = SmtpProviderData.load(self.smtp_requirer)
         charm_config = CharmConfig(self.config)
 
         return self._pebble_service.render_pebble_layer(
@@ -401,6 +418,7 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             openfga_integration_data,
             openfga_model_data,
             tracing_data,
+            smtp_data,
             self.peer_data,
             charm_config,
         )

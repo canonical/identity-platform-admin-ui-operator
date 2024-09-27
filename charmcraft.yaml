@@ -68,6 +68,12 @@ requires:
       Receive a CA cert.
       This relation can be used with a local CA to obtain the CA cert that was used to sign proxied
       endpoints.
+  smtp:
+    interface: smtp
+    limit: 1
+    description: |
+      Receive SMTP server's configurations.
+      This integration can be used to integrate the SMTP integrator.
 
 provides:
   metrics-endpoint:

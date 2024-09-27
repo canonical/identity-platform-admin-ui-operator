@@ -35,6 +35,7 @@ OPENFGA_STORE_NAME = "identity-platform-admin-ui-store"
 OAUTH_INTEGRATION_NAME = "oauth"
 INGRESS_INTEGRATION_NAME = "ingress"
 CERTIFICATE_TRANSFER_INTEGRATION_NAME = "receive-ca-cert"
+SMTP_INTEGRATION_NAME = "smtp"
 PEER_INTEGRATION_NAME = "identity-platform-admin-ui"
 
 # Peer data keys

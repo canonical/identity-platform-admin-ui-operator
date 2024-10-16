@@ -1,5 +1,6 @@
 # Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
+
 import json
 import logging
 import re
@@ -21,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class CmdExecConfig:
+    service_context: Optional[str] = None
     environment: EnvVars = field(default_factory=dict)
     timeout: int = 20
     stdin: Optional[str | bytes | TextIO | BinaryIO] = None
@@ -83,7 +85,12 @@ class CommandLine:
         ]
 
         try:
-            stdout = self._run_cmd(cmd, exec_config=CmdExecConfig(stdin=json.dumps(identity)))
+            stdout = self._run_cmd(
+                cmd,
+                exec_config=CmdExecConfig(
+                    service_context=WORKLOAD_SERVICE, stdin=json.dumps(identity)
+                ),
+            )
         except Error as err:
             logger.error("Failed to create the identity: %s", err)
             return None
@@ -97,10 +104,6 @@ class CommandLine:
         exec_config: CmdExecConfig = CmdExecConfig(),
     ) -> str:
         logger.debug(f"Running command: {cmd}")
-
-        pebble_plan = self.container.pebble.get_plan()
-        workload_service_environment = pebble_plan.services[WORKLOAD_SERVICE].environment
-        exec_config.environment = {**workload_service_environment, **exec_config.environment}
 
         process = self.container.exec(cmd, **asdict(exec_config))
         try:

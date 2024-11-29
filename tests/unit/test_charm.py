@@ -37,9 +37,9 @@ class TestPebbleReadyEvent:
 
         mocked_open_port.assert_called_once()
         mocked_charm_holistic_handler.assert_called_once()
-        assert (
-            mocked_workload_service_version.call_count > 1
-        ), "workload service version should be set"
+        assert mocked_workload_service_version.call_count > 1, (
+            "workload service version should be set"
+        )
         assert mocked_workload_service_version.call_args[0] == (
             mocked_workload_service_version.return_value,
         )
@@ -207,7 +207,7 @@ class TestOpenFGAStoreRemovedEvent:
         harness.charm.openfga_requirer.on.openfga_store_removed.emit()
 
         assert not harness.charm.peer_data[mocked_workload_service_version.return_value], (
-            "Leader unit should clean " "up peer data"
+            "Leader unit should clean up peer data"
         )
         mocked_charm_holistic_handler.assert_called_once()
 
@@ -433,7 +433,6 @@ class TestHolisticHandler:
             harness.charm._holistic_handler(mocked_event)
 
         mocked_event.defer.assert_not_called()
-        mocked_workload_service.prepare_dir.assert_called_once()
         mocked_workload_service.push_ca_certs.assert_called_once_with(
             mocked_ca_bundle.return_value.ca_bundle
         )

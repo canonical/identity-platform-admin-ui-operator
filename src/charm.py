@@ -19,7 +19,7 @@ from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.hydra.v0.hydra_endpoints import HydraEndpointsRequirer
 from charms.hydra.v0.oauth import OAuthInfoChangedEvent, OAuthRequirer
 from charms.kratos.v0.kratos_info import KratosInfoRequirer
-from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer, PromtailDigestError
+from charms.loki_k8s.v1.loki_push_api import LogForwarder
 from charms.oathkeeper.v0.oathkeeper_info import OathkeeperInfoRequirer
 from charms.openfga_k8s.v1.openfga import (
     OpenFGARequires,
@@ -57,8 +57,6 @@ from constants import (
     HYDRA_ENDPOINTS_INTEGRATION_NAME,
     INGRESS_INTEGRATION_NAME,
     KRATOS_INFO_INTEGRATION_NAME,
-    LOG_DIR,
-    LOG_FILE,
     LOKI_API_PUSH_INTEGRATION_NAME,
     OATHKEEPER_INFO_INTEGRATION_NAME,
     OAUTH_INTEGRATION_NAME,
@@ -171,12 +169,7 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
                 }
             ],
         )
-        self.loki_consumer = LogProxyConsumer(
-            self,
-            log_files=[str(LOG_FILE)],
-            relation_name=LOKI_API_PUSH_INTEGRATION_NAME,
-            container_name=WORKLOAD_CONTAINER,
-        )
+        self._log_forwarder = LogForwarder(self, relation_name=LOKI_API_PUSH_INTEGRATION_NAME)
         self._grafana_dashboards = GrafanaDashboardProvider(
             self, relation_name=GRAFANA_DASHBOARD_INTEGRATION_NAME
         )
@@ -240,11 +233,6 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         self.framework.observe(
             self.smtp_requirer.on.smtp_data_available,
             self._on_smtp_data_available,
-        )
-
-        self.framework.observe(
-            self.loki_consumer.on.promtail_digest_error,
-            self._promtail_error,
         )
 
         self.framework.observe(
@@ -377,7 +365,6 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             event.defer()
             return
 
-        self._workload_service.prepare_dir(path=LOG_DIR)
         if self.unit.is_leader():
             self.peer_data.prepare()
 
@@ -422,9 +409,6 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             self.peer_data,
             charm_config,
         )
-
-    def _promtail_error(self, event: PromtailDigestError) -> None:
-        logger.error(event.message)
 
     def _on_create_identity_action(self, event: ActionEvent) -> None:
         traits = event.params["traits"]

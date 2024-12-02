@@ -40,8 +40,19 @@ source .tox/dev/bin/activate
 tox -e fmt           # update your code according to linting rules
 tox -e lint          # code style
 tox -e unit          # unit tests
-tox -e integration   # integration tests
 tox                  # runs 'fmt', 'lint', and 'unit' environments
+```
+
+It is recommended to use Multipass VM for running integration tests in a predictable environment.
+
+```
+multipass launch --cpus 4 --memory 8G --disk 50G --name charm-dev charm-dev
+multipass stop charm-dev
+multipass mount identity-platform-admin-ui-operator charm-dev:~/identity-platform-admin-ui-operator --type=native
+multipass start charm-dev
+multipass shell charm-dev
+cd identity-platform-admin-ui-operator
+tox -e integration
 ```
 
 ## Building

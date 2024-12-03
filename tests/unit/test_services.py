@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from constants import ADMIN_SERVICE_PORT, CA_CERT_DIR_PATH, LOG_DIR, WORKLOAD_CONTAINER
+from constants import ADMIN_SERVICE_PORT, CA_CERT_DIR_PATH, WORKLOAD_CONTAINER
 from env_vars import EnvVarConvertible
 from exceptions import PebbleError
 from services import DEFAULT_CONTAINER_ENV, WORKLOAD_SERVICE, PebbleService, WorkloadService
@@ -58,8 +58,8 @@ class TestWorkloadService:
         self, mocked_container: MagicMock, workload_service: WorkloadService
     ) -> None:
         mocked_container.isdir.return_value = False
-        workload_service.prepare_dir(LOG_DIR)
-        mocked_container.make_dir.assert_called_once_with(path=LOG_DIR, make_parents=True)
+        workload_service.prepare_dir("some_dir")
+        mocked_container.make_dir.assert_called_once_with(path="some_dir", make_parents=True)
 
     def test_push_ca_certs(
         self, mocked_container: MagicMock, workload_service: WorkloadService

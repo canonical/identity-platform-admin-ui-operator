@@ -3,7 +3,7 @@
 
 from typing import Mapping, Protocol, TypeAlias, Union
 
-from constants import ADMIN_SERVICE_PORT, DEFAULT_CONTEXT_PATH, LOG_FILE
+from constants import ADMIN_SERVICE_PORT, DEFAULT_CONTEXT_PATH
 
 EnvVars: TypeAlias = Mapping[str, Union[str, bool]]
 
@@ -38,7 +38,6 @@ DEFAULT_CONTAINER_ENV = {
     "OAUTH2_AUTH_COOKIES_ENCRYPTION_KEY": "",
     "CONTEXT_PATH": DEFAULT_CONTEXT_PATH,
     "LOG_LEVEL": "info",
-    "LOG_FILE": str(LOG_FILE),
     "DEBUG": False,
 }
 

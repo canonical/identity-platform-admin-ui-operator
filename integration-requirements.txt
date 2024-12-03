@@ -1,5 +1,5 @@
 -r requirements.txt
-httpx==0.27.2
+httpx==0.28.0
 ipdb
 juju
 git+https://github.com/canonical/iam-bundle@oauth_tools-v0.1.1#egg=oauth_tools

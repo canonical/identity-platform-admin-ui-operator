@@ -410,8 +410,6 @@ def load_oauth_client_config(
     )
 
     # Bootstrap the client config to have the client_id as an aud.
-    # TODO(nsklikas): Remove when the login-ui automatically adds it to the audience
-    # https://github.com/canonical/identity-platform-login-ui/issues/244
     if not oauth_requirer:
         return client
 

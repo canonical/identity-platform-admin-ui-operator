@@ -25,7 +25,7 @@ resources:
   oci-image:
     type: oci-image
     description: Identity Platform Admin UI oci-image
-    upstream-source: ghcr.io/canonical/identity-platform-admin-ui:v1.18.0
+    upstream-source: ghcr.io/canonical/identity-platform-admin-ui:v1.22.0
 
 requires:
   hydra-endpoint-info:

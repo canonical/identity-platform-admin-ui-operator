@@ -1,89 +1,40 @@
-# reusable workflow triggered manually
-name: Release charm to other tracks and channels
+name: release
 
 on:
   workflow_dispatch:
-    inputs:
-      destination-channel:
-        description: 'Destination Channel'
-        required: true
-      origin-channel:
-        description: 'Origin Channel'
-        required: true
+  push:
+    branches:
+    - main
+    - "release-**"
+    - "track/**"
+
+permissions:
+    contents: write
+    pull-requests: write
 
 jobs:
-  promote-charm:
-    name: Promote charm
-    runs-on: ubuntu-24.04
+  release-please:
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-      - name: Release charm to channel
-        uses: canonical/charming-actions/release-charm@1753e0803f70445132e92acd45c905aba6473225 # 2.7.0
-        with:
-          credentials: ${{ secrets.CHARMCRAFT_CREDENTIALS }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          destination-channel: ${{ github.event.inputs.destination-channel }}
-          origin-channel: ${{ github.event.inputs.origin-channel }}
-          base-channel: '22.04'
-
-  revision:
-    concurrency:
-      group: ${{ github.event.inputs.destination-channel }}
-      cancel-in-progress: true
-    needs: promote-charm
-    outputs:
-      revision: ${{ steps.set-revision.outputs.revision }}
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-        with:
-          fetch-depth: 0
-      - name: Set revision
-        id: set-revision
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:   
+          token: ${{ secrets.PAT_TOKEN }}
+          # optional. customize path to release-please-config.json
+          config-file: release-please-config.json
+          # optional. customize path to .release-please-manifest.json
+          manifest-file: .release-please-manifest.json
+          # target adjusts for track releases
+          target-branch: ${{ github.ref_name }}
+          # ensure release-please manifest has the component set to track-<version> in track branches
+          include-component-in-tag: ${{ contains('track', github.ref_name) }}
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - name: Workaround for https://github.com/googleapis/release-please/issues/922
+        if: ${{ steps.release.outputs.pr != '' }}
         run: |
-          sudo snap install charmcraft --classic --channel latest/stable
-          revision=$(charmcraft status ${{ env.CHARM_NAME }} --format json | jq '.[] | select(.track == "${{ env.TRACK }}") | .mappings[0].releases[] | select(.channel == "${{ github.event.inputs.destination-channel }}") | .revision')
-          echo "setting output of revision=$revision"
-          echo "revision=$revision" >> $GITHUB_OUTPUT
+          echo "Closing and reopening PR to trigger checks"
+          gh pr close ${{ fromJSON(steps.release.outputs.pr).number }} || true
+          gh pr reopen ${{ fromJSON(steps.release.outputs.pr).number }} || true
+          gh pr merge --auto --merge ${{ fromJSON(steps.release.outputs.pr).number }} || true
         env:
-          CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_CREDENTIALS }}
-          CHARM_NAME: identity-platform-admin-ui
-          # only cater for latest track for now
-          TRACK: latest
-
-  dev-deploy:
-    concurrency:
-      group: ${{ github.event.inputs.destination-channel }}
-      cancel-in-progress: true
-    needs:
-      - promote-charm
-      - revision
-    if: ${{ (github.event.inputs.destination-channel == 'latest/edge') }}  
-    uses: ./.github/workflows/_deploy.yaml
-    secrets:
-        CLIENT_ID: ${{ secrets.JIMM_DEV_CLIENT_ID }}
-        CLIENT_SECRET: ${{ secrets.JIMM_DEV_CLIENT_SECRET }}
-        JIMM_URL: ${{ secrets.JIMM_URL }}
-    with:
-        model: dev-iam
-        revision: ${{ needs.revision.outputs.revision }}
-        channel: ${{ github.event.inputs.destination-channel }}
-
-  stg-deploy:
-    concurrency:
-      group: ${{ github.event.inputs.destination-channel }}
-      cancel-in-progress: true
-    needs:
-      - promote-charm
-      - revision
-    if: ${{ (github.event.inputs.destination-channel == 'latest/stable') }}
-    uses: ./.github/workflows/_deploy.yaml
-    secrets:
-        CLIENT_ID: ${{ secrets.JIMM_STG_CLIENT_ID }}
-        CLIENT_SECRET: ${{ secrets.JIMM_STG_CLIENT_SECRET }}
-        JIMM_URL: ${{ secrets.JIMM_URL }}
-    with:
-        model: stg-iam
-        revision: ${{ needs.revision.outputs.revision }}
-        channel: ${{ github.event.inputs.destination-channel }}
+          GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}

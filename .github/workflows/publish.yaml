@@ -4,26 +4,9 @@ run-name: Publish to ${{ inputs.destination_channel}} and deploy
 
 
 on:
-  workflow_call:
-    inputs:
-      source_branch:
-        description: Github branch from this repo to publish.  If blank, will use the default branch
-        default: ''
-        required: false
-        type: string
-    secrets:
-      CHARMCRAFT_CREDENTIALS:
-        required: true
-      JIMM_DEV_CLIENT_ID:
-          required: true
-      JIMM_DEV_CLIENT_SECRET:
-          required: true
-      JIMM_STG_CLIENT_ID:
-        required: true
-      JIMM_STG_CLIENT_SECRET:
-          required: true
-      JIMM_URL:
-        required: true
+  push:
+    tags:
+      - "v**"  
 
   workflow_dispatch:
     inputs:
@@ -37,11 +20,33 @@ on:
         required: false
         default: ''
         type: string
+      override-ci:
+        description: Override standard release flow
+        required: true  
+        type: boolean
 
 jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      branch: ${{ steps.check_step.outputs.branch }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+        with:
+          fetch-depth: 0
+      - name: Get current branch
+        id: check_step
+        run: |
+          raw=$(git branch -r --contains ${{ github.ref }})
+          branch=${raw##*/}
+          echo "branch=$branch" >> $GITHUB_OUTPUT
+          echo "Branch is $branch."  
+  
   publish-charm:
     name: Publish Charm
     runs-on: ubuntu-24.04
+    needs: check
     outputs:
       channel: ${{ steps.parse-inputs.outputs.destination_channel }}
     steps:
@@ -49,7 +54,6 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           fetch-depth: 0
-          ref: ${{ inputs.source_branch }}
 
       - name: Select charmhub channel
         uses: canonical/charming-actions/channel@1753e0803f70445132e92acd45c905aba6473225 # 2.7.0
@@ -64,7 +68,7 @@ jobs:
           # destination_channel
           destination_channel="${{ inputs.destination_channel || steps.select-channel.outputs.name }}"
           echo "setting output of destination_channel=$destination_channel"
-          echo "::set-output name=destination_channel::$destination_channel"
+          echo "destination_channel=$destination_channel" >> $GITHUB_OUTPUT
 
       - name: Setup lxd
         uses: canonical/setup-lxd@v0.1.2
@@ -83,7 +87,9 @@ jobs:
     concurrency:
       group: ${{ inputs.source_branch }}-${{ needs.publish-charm.outputs.channel }}
       cancel-in-progress: true
-    needs: publish-charm
+    needs: 
+      - check
+      - publish-charm
     outputs:
       revision: ${{ steps.set-revision.outputs.revision }}
     runs-on: ubuntu-24.04
@@ -92,7 +98,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           fetch-depth: 0
-          ref: ${{ inputs.source_branch }}
+          ref: ${{ needs.check.outputs.branch }}
       - name: Set revision
         id: set-revision
         run: |
@@ -111,6 +117,7 @@ jobs:
       group: ${{ inputs.source_branch }}-${{ needs.publish-charm.outputs.channel }}
       cancel-in-progress: true
     needs:
+      - check
       - publish-charm
       - revision
     if: ${{ (needs.publish-charm.outputs.channel == 'latest/edge') }}
@@ -126,9 +133,10 @@ jobs:
 
   stg-deploy:
     concurrency:
-      group: ${{ inputs.source_branch }}-${{ needs.publish-charm.outputs.channel }}
+      group: ${{ needs.check.outputs.branch }}-${{ needs.publish-charm.outputs.channel }}
       cancel-in-progress: true
     needs:
+      - check
       - publish-charm
       - revision
     if: ${{ (needs.publish-charm.outputs.channel == 'latest/stable') }}

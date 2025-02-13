@@ -5,7 +5,6 @@ on:
   push:
     branches:
     - main
-    - "release-**"
     - "track/**"
 
 permissions:
@@ -27,14 +26,10 @@ jobs:
           # target adjusts for track releases
           target-branch: ${{ github.ref_name }}
           # ensure release-please manifest has the component set to track-<version> in track branches
-          include-component-in-tag: ${{ contains('track', github.ref_name) }}
+          include-component-in-tag: ${{ contains(github.ref_name, 'track') }}
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-      - name: Workaround for https://github.com/googleapis/release-please/issues/922
-        if: ${{ steps.release.outputs.pr != '' }}
+      - if: ${{ steps.release.outputs.pr != '' }}
         run: |
-          echo "Closing and reopening PR to trigger checks"
-          gh pr close ${{ fromJSON(steps.release.outputs.pr).number }} || true
-          gh pr reopen ${{ fromJSON(steps.release.outputs.pr).number }} || true
           gh pr merge --auto --merge ${{ fromJSON(steps.release.outputs.pr).number }} || true
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}

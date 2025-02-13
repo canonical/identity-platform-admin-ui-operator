@@ -6,7 +6,8 @@ run-name: Publish to ${{ inputs.destination_channel}} and deploy
 on:
   push:
     tags:
-      - "v**"  
+      - "v**"
+      - "track**"  
 
   workflow_dispatch:
     inputs:
@@ -30,6 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       branch: ${{ steps.check_step.outputs.branch }}
+      channel: ${{ steps.export.outputs.channel }}
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
@@ -42,6 +44,16 @@ jobs:
           branch=${raw##*/}
           echo "branch=$branch" >> $GITHUB_OUTPUT
           echo "Branch is $branch."  
+      - name: Get channel 
+        if: ${{ steps.check_step.outputs.branch == 'main'}}
+        run: echo "channel=latest/edge" >> $GITHUB_ENV
+      - name: Get channel 
+        if: ${{ steps.check_step.outputs.branch != 'main'}}
+        run: echo "channel=${{ steps.check_step.outputs.branch }}/edge" >> $GITHUB_ENV
+      - name: Export channel
+        id: export
+        run: echo channel=${{ env.channel }} >> $GITHUB_OUTPUT
+
   
   publish-charm:
     name: Publish Charm
@@ -55,18 +67,13 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Select charmhub channel
-        uses: canonical/charming-actions/channel@1753e0803f70445132e92acd45c905aba6473225 # 2.7.0
-        id: select-channel
-        if: ${{ inputs.destination_channel == '' }}
-
       # Combine inputs from different sources to a single canonical value so later steps don't
       # need logic for picking the right one
       - name: Parse and combine inputs
         id: parse-inputs
         run: |
           # destination_channel
-          destination_channel="${{ inputs.destination_channel || steps.select-channel.outputs.name }}"
+          destination_channel="${{ inputs.destination_channel || needs.check.outputs.channel }}"
           echo "setting output of destination_channel=$destination_channel"
           echo "destination_channel=$destination_channel" >> $GITHUB_OUTPUT
 

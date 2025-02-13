@@ -6,7 +6,8 @@ run-name: Publish to ${{ inputs.destination_channel}} and deploy
 on:
   push:
     tags:
-      - "v**"  
+      - "v**"
+      - "track-**"  
 
   workflow_dispatch:
     inputs:
@@ -53,6 +54,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
+          ref: ${{ needs.check.outputs.branch }}
           fetch-depth: 0
 
       - name: Select charmhub channel

@@ -28,7 +28,7 @@ jobs:
           target-branch: ${{ github.ref_name }}
           # ensure release-please manifest has the component set to track-<version> in track branches
           include-component-in-tag: ${{ contains('track', github.ref_name) }}
-      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
       - name: Workaround for https://github.com/googleapis/release-please/issues/922
         if: ${{ steps.release.outputs.pr != '' }}
         run: |

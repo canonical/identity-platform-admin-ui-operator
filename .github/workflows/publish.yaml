@@ -6,7 +6,8 @@ run-name: Publish to ${{ inputs.destination_channel}} and deploy
 on:
   push:
     tags:
-      - "v**"  
+      - "v**"
+      - "track-**"  
 
   workflow_dispatch:
     inputs:
@@ -59,6 +60,10 @@ jobs:
         uses: canonical/charming-actions/channel@1753e0803f70445132e92acd45c905aba6473225 # 2.7.0
         id: select-channel
         if: ${{ inputs.destination_channel == '' }}
+        env:
+          # hijacking this https://github.com/canonical/charming-actions/blob/main/dist/channel/index.js#L4007
+          # as action doesn't support tags
+          GITHUB_REF: ${{ needs.check.outputs.branch }}
 
       # Combine inputs from different sources to a single canonical value so later steps don't
       # need logic for picking the right one

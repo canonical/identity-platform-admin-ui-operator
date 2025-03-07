@@ -12,24 +12,8 @@ permissions:
     pull-requests: write
 
 jobs:
-  release-please:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: googleapis/release-please-action@v4
-        id: release
-        with:   
-          token: ${{ secrets.PAT_TOKEN }}
-          # optional. customize path to release-please-config.json
-          config-file: release-please-config.json
-          # optional. customize path to .release-please-manifest.json
-          manifest-file: .release-please-manifest.json
-          # target adjusts for track releases
-          target-branch: ${{ github.ref_name }}
-          # ensure release-please manifest has the component set to track-<version> in track branches
-          include-component-in-tag: ${{ contains(github.ref_name, 'track') }}
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-      - if: ${{ steps.release.outputs.pr != '' }}
-        run: |
-          gh pr merge --auto --merge ${{ fromJSON(steps.release.outputs.pr).number }} || true
-        env:
-          GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
+  release:
+      name: release
+      uses: canonical/identity-team/.github/workflows/charm-release.yaml@17b1464c20132f69a42ca846cd816715724ea5f3 # v1.4.2
+      secrets:
+        PAT_TOKEN: ${{ secrets.PAT_TOKEN }}

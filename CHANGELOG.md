@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/canonical/identity-platform-admin-ui-operator/compare/v1.0.0...v1.0.1) (2025-03-13)
+
+
+### Bug Fixes
+
+* enforce ops to be &gt; 2.18 ([38be1fa](https://github.com/canonical/identity-platform-admin-ui-operator/commit/38be1fa345bf830c8ecc1506eb723bdd32775a6a))
+
 ## 1.0.0 (2025-02-17)
 
 

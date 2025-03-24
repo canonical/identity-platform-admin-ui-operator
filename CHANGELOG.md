@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.0](https://github.com/canonical/identity-platform-admin-ui-operator/compare/v1.0.1...v1.1.0) (2025-03-24)
+
+
+### Features
+
+* add terraform module ([549fb06](https://github.com/canonical/identity-platform-admin-ui-operator/commit/549fb06388dc9f5ed6958a3a1757f7f995716416))
+* add Terraform module for the charm ([f386837](https://github.com/canonical/identity-platform-admin-ui-operator/commit/f386837984e2f310eec38b0ea0d52c1cdd72a691))
+
 ## [1.0.1](https://github.com/canonical/identity-platform-admin-ui-operator/compare/v1.0.0...v1.0.1) (2025-03-14)
 
 

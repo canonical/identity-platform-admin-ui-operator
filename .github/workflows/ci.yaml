@@ -19,7 +19,7 @@ on:
 jobs:
   tests:
     name: CI
-    uses: canonical/identity-team/.github/workflows/charm-pull-request.yaml@d7caf9d50408e75919bcf6f1d9350422683a1563
+    uses: canonical/identity-team/.github/workflows/charm-pull-request.yaml@c4ed6e194c088da7b970c59abe46083f71cedf67
     with:
       container-name: "admin-ui"
       use-charmcraftcache: true

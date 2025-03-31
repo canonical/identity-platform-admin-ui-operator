@@ -130,3 +130,4 @@ parts:
     charm-binary-python-packages:
       - jsonschema
       - "pydantic>=2"
+      - "setuptools>=70.0.0"

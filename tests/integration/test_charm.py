@@ -73,7 +73,7 @@ async def test_build_and_deploy(
 
     await ops_test.model.deploy(
         entity_url=OPENFGA_APP,
-        channel="latest/edge",
+        channel="2.0/edge",
         series="jammy",
         trust=True,
     )
@@ -89,7 +89,7 @@ async def test_build_and_deploy(
 
     await ops_test.model.deploy(
         entity_url=SMTP_INTEGRATOR_APP,
-        channel="latest/stable",
+        channel="latest/edge",
         series="jammy",
         trust=True,
         config={

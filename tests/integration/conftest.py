@@ -2,6 +2,7 @@
 # See LICENSE file for licensing details.
 import asyncio
 import functools
+import os
 import re
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -160,7 +161,12 @@ def admin_service_version() -> str:
 
 @pytest_asyncio.fixture(scope="module")
 async def local_charm(ops_test: OpsTest) -> Path:
-    return await ops_test.build_charm(".")
+    # in GitHub CI, charms are built with charmcraftcache and uploaded to $CHARM_PATH
+    charm = os.getenv("CHARM_PATH")
+    if not charm:
+        # fall back to build locally - required when run outside of GitHub CI
+        charm = await ops_test.build_charm(".")
+    return charm
 
 
 @pytest_asyncio.fixture(scope="module")
@@ -208,11 +214,11 @@ async def mail_deployment(ops_test: OpsTest) -> None:
     )
 
     # Wait for the deployment to be ready
-    max_retries = 5
+    max_retries = 10
     for _ in range(max_retries):
         mail_deployment = await client.get(Deployment, name="mail", namespace=ops_test.model_name)
         if not mail_deployment.status.readyReplicas:
-            await asyncio.sleep(5)
+            await asyncio.sleep(10)
             continue
 
         break

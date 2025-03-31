@@ -214,11 +214,11 @@ async def mail_deployment(ops_test: OpsTest) -> None:
     )
 
     # Wait for the deployment to be ready
-    max_retries = 5
+    max_retries = 10
     for _ in range(max_retries):
         mail_deployment = await client.get(Deployment, name="mail", namespace=ops_test.model_name)
         if not mail_deployment.status.readyReplicas:
-            await asyncio.sleep(5)
+            await asyncio.sleep(10)
             continue
 
         break

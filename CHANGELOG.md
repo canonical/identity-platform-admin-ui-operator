@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.1.1](https://github.com/canonical/identity-platform-admin-ui-operator/compare/v1.1.0...v1.1.1) (2025-03-31)
+
+
+### Bug Fixes
+
+* add playwright install-deps command ([a863da9](https://github.com/canonical/identity-platform-admin-ui-operator/commit/a863da9d503ac87ea87a0ed6c09e6859544ca5af))
+* addressing CVEs related to setupttools ([ae240c0](https://github.com/canonical/identity-platform-admin-ui-operator/commit/ae240c0eb9acf7d528c5d96bc9e379bbfbdb1eb7))
+* fix the ci ([1cfbfcf](https://github.com/canonical/identity-platform-admin-ui-operator/commit/1cfbfcff5e1111dea5f2f1f552c73a5a1d9f7eb6))
+* update smtp charm to latest/edge ([3ef9185](https://github.com/canonical/identity-platform-admin-ui-operator/commit/3ef9185b1dd2ffe91e51b84110e9056aaf25f9c3))
+
 ## [1.1.0](https://github.com/canonical/identity-platform-admin-ui-operator/compare/v1.0.1...v1.1.0) (2025-03-24)
 
 

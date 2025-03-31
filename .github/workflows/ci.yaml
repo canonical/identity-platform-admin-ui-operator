@@ -8,6 +8,7 @@ on:
      - "main"
      - "release-**"
      - "track/**"
+     - "debug-integration-fail"
      paths-ignore:
      - "terraform/**"
    pull_request:
@@ -19,7 +20,7 @@ on:
 jobs:
   tests:
     name: CI
-    uses: canonical/identity-team/.github/workflows/charm-pull-request.yaml@v1.7.6
+    uses: canonical/identity-team/.github/workflows/charm-pull-request.yaml@test-int-tests
     with:
       container-name: "admin-ui"
       use-charmcraftcache: true

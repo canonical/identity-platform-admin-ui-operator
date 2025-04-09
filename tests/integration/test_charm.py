@@ -5,7 +5,6 @@
 import json
 import logging
 import os
-from pathlib import Path
 from typing import Callable, Optional
 
 import pytest
@@ -53,11 +52,11 @@ async def test_build_and_deploy(
     ops_test: OpsTest,
     request: pytest.FixtureRequest,
     ext_idp_service: ExternalIdpService,
-    local_charm: Path,
+    local_charm: str,
     mail_deployment: None,
 ) -> None:
     await ops_test.model.deploy(
-        str(local_charm),
+        local_charm,
         resources={"oci-image": ADMIN_SERVICE_IMAGE},
         application_name=ADMIN_SERVICE_APP,
         trust=True,
@@ -310,7 +309,7 @@ async def test_upgrade(
     ops_test: OpsTest,
     request: pytest.FixtureRequest,
     admin_service_application: Application,
-    local_charm: Path,
+    local_charm: str,
 ) -> None:
     # remove the current application
     await ops_test.model.remove_application(
@@ -333,7 +332,7 @@ async def test_upgrade(
 
     # upgrade the charm
     await admin_service_application.refresh(
-        path=str(local_charm),
+        path=local_charm,
         resources={"oci-image": ADMIN_SERVICE_IMAGE},
     )
 

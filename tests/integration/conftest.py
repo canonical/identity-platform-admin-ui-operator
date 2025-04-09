@@ -59,7 +59,7 @@ async def integrate_dependencies(
         f"{ADMIN_SERVICE_APP}:hydra-endpoint-info",
         hydra_app_name,
     )
-    await ops_test.model.integrate(ADMIN_SERVICE_APP, OPENFGA_APP)
+    await ops_test.model.integrate(f"{ADMIN_SERVICE_APP}:openfga", f"{OPENFGA_APP}:openfga")
     await ops_test.model.integrate(ADMIN_SERVICE_APP, public_ingress_name)
     await ops_test.model.integrate(f"{ADMIN_SERVICE_APP}:oauth", hydra_app_name)
     await ops_test.model.integrate(ADMIN_SERVICE_APP, self_signed_cert_app_name)
@@ -160,13 +160,13 @@ def admin_service_version() -> str:
 
 
 @pytest_asyncio.fixture(scope="module")
-async def local_charm(ops_test: OpsTest) -> Path:
+async def local_charm(ops_test: OpsTest) -> str:
     # in GitHub CI, charms are built with charmcraftcache and uploaded to $CHARM_PATH
     charm = os.getenv("CHARM_PATH")
     if not charm:
         # fall back to build locally - required when run outside of GitHub CI
         charm = await ops_test.build_charm(".")
-    return charm
+    return str(charm)
 
 
 @pytest_asyncio.fixture(scope="module")

@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.2](https://github.com/canonical/identity-platform-admin-ui-operator/compare/v1.1.1...v1.1.2) (2025-04-17)
+
+
+### Bug Fixes
+
+* fix the openfga integration ([bf3e8dd](https://github.com/canonical/identity-platform-admin-ui-operator/commit/bf3e8ddaa49b4e48adfaa7b919a6fba6c80f54fb))
+
 ## [1.1.1](https://github.com/canonical/identity-platform-admin-ui-operator/compare/v1.1.0...v1.1.1) (2025-03-31)
 
 

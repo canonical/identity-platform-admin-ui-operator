@@ -1,30 +1,32 @@
-# reusable workflow triggered manually
-name: Release charm to other tracks and channels
+name: Promote Charm
 
 on:
   workflow_dispatch:
     inputs:
-      destination-channel:
-        description: 'Destination Channel'
-        required: true
       origin-channel:
         description: 'Origin Channel'
+        type: string
         required: true
+      destination-channel:
+        description: 'Destination Channel'
+        type: string
+        required: true
+      charmcraft-channel:
+        description: 'Snap channel to use when installing charmcraft'
+        required: false
+        type: string
+        default: 'latest/edge'
 
 jobs:
   promote-charm:
-    name: Promote charm
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-      - name: Release charm to channel
-        uses: canonical/charming-actions/release-charm@1753e0803f70445132e92acd45c905aba6473225 # 2.7.0
-        with:
-          credentials: ${{ secrets.CHARMCRAFT_CREDENTIALS }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          destination-channel: ${{ github.event.inputs.destination-channel }}
-          origin-channel: ${{ github.event.inputs.origin-channel }}
-          base-channel: '22.04'
+      name: Promote charm
+      uses: canonical/identity-team/.github/workflows/charm-promotion.yaml@0a32ad19139490d02dd5283ab91a63295c7a803f # v1.8.4
+      with:
+        origin-channel: ${{ github.event.inputs.origin-channel }}
+        destination-channel: ${{ github.event.inputs.destination-channel }}
+        charmcraft-channel: ${{ github.event.inputs.charmcraft-channel }}
+      secrets:
+        CHARMCRAFT_CREDENTIALS: ${{ secrets.CHARMCRAFT_CREDENTIALS }}
 
   revision:
     concurrency:
@@ -39,6 +41,9 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           fetch-depth: 0
+      - name: Set charm name
+        id: set-charm-name
+        run: echo charm_name=$(cat charmcraft.yaml | yq '.name') >> $GITHUB_OUTPUT
       - name: Set revision
         id: set-revision
         run: |
@@ -48,7 +53,7 @@ jobs:
           echo "revision=$revision" >> $GITHUB_OUTPUT
         env:
           CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_CREDENTIALS }}
-          CHARM_NAME: identity-platform-admin-ui
+          CHARM_NAME: ${{ steps.set-charm-name.outputs.charm_name }}
           # only cater for latest track for now
           TRACK: latest
 
@@ -59,16 +64,16 @@ jobs:
     needs:
       - promote-charm
       - revision
-    if: ${{ (github.event.inputs.destination-channel == 'latest/edge') }}  
+    if: ${{ (github.event.inputs.destination-channel == 'latest/edge') }}
     uses: ./.github/workflows/_deploy.yaml
     secrets:
-        CLIENT_ID: ${{ secrets.JIMM_DEV_CLIENT_ID }}
-        CLIENT_SECRET: ${{ secrets.JIMM_DEV_CLIENT_SECRET }}
-        JIMM_URL: ${{ secrets.JIMM_URL }}
+      CLIENT_ID: ${{ secrets.JIMM_DEV_CLIENT_ID }}
+      CLIENT_SECRET: ${{ secrets.JIMM_DEV_CLIENT_SECRET }}
+      JIMM_URL: ${{ secrets.JIMM_URL }}
     with:
-        model: dev-iam
-        revision: ${{ needs.revision.outputs.revision }}
-        channel: ${{ github.event.inputs.destination-channel }}
+      model: dev-iam
+      revision: ${{ needs.revision.outputs.revision }}
+      channel: ${{ github.event.inputs.destination-channel }}
 
   stg-deploy:
     concurrency:
@@ -80,10 +85,10 @@ jobs:
     if: ${{ (github.event.inputs.destination-channel == 'latest/stable') }}
     uses: ./.github/workflows/_deploy.yaml
     secrets:
-        CLIENT_ID: ${{ secrets.JIMM_STG_CLIENT_ID }}
-        CLIENT_SECRET: ${{ secrets.JIMM_STG_CLIENT_SECRET }}
-        JIMM_URL: ${{ secrets.JIMM_URL }}
+      CLIENT_ID: ${{ secrets.JIMM_STG_CLIENT_ID }}
+      CLIENT_SECRET: ${{ secrets.JIMM_STG_CLIENT_SECRET }}
+      JIMM_URL: ${{ secrets.JIMM_URL }}
     with:
-        model: stg-iam
-        revision: ${{ needs.revision.outputs.revision }}
-        channel: ${{ github.event.inputs.destination-channel }}
+      model: stg-iam
+      revision: ${{ needs.revision.outputs.revision }}
+      channel: ${{ github.event.inputs.destination-channel }}

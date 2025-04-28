@@ -98,9 +98,8 @@ juju run identity-platform-admin-ui/0 create-identity schema=<identity-schema-id
 
 ## Security
 
-Security issues can be reported
-through [LaunchPad](https://wiki.ubuntu.com/DebuggingSecurity#How%20to%20File).
-Please do not file GitHub issues about security issues.
+Please see [SECURITY.md](https://github.com/canonical/identity-platform-admin-ui-operator/blob/main/SECURITY.md)
+for guidelines on reporting security issues.
 
 ## Contributing
 

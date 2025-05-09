@@ -445,7 +445,7 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
 
     def _resource_reqs_from_config(self) -> ResourceRequirements:
         limits = {"cpu": self.model.config.get("cpu"), "memory": self.model.config.get("memory")}
-        requests = {"cpu": "100m", "mem": "200Mi"}
+        requests = {"cpu": "100m", "memory": "200Mi"}
         return adjust_resource_requirements(limits, requests, adhere_to_requests=True)
 
 

@@ -70,7 +70,7 @@ convention = "google"
 pretty = true
 mypy_path = "./src:./lib/:./tests"
 # Exclude non-admin-ui libraries
-exclude = 'lib/charms/((?!identity_platform_admin_ui).)'
+exclude = 'lib/charms/((?!identity_platform_admin_ui/).)'
 follow_imports = "silent"
 warn_redundant_casts = true
 warn_unused_configs = true

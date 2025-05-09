@@ -21,6 +21,12 @@ from charms.hydra.v0.oauth import OAuthInfoChangedEvent, OAuthRequirer
 from charms.kratos.v0.kratos_info import KratosInfoRequirer
 from charms.loki_k8s.v1.loki_push_api import LogForwarder
 from charms.oathkeeper.v0.oathkeeper_info import OathkeeperInfoRequirer
+from charms.observability_libs.v0.kubernetes_compute_resources_patch import (
+    K8sResourcePatchFailedEvent,
+    KubernetesComputeResourcesPatch,
+    ResourceRequirements,
+    adjust_resource_requirements,
+)
 from charms.openfga_k8s.v1.openfga import (
     OpenFGARequires,
     OpenFGAStoreCreateEvent,
@@ -176,6 +182,12 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
 
         self.smtp_requirer = SmtpRequires(self)
 
+        self.resources_patch = KubernetesComputeResourcesPatch(
+            self,
+            WORKLOAD_CONTAINER,
+            resource_reqs_func=self._resource_reqs_from_config,
+        )
+
         self.framework.observe(self.on.admin_ui_pebble_ready, self._on_admin_ui_pebble_ready)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.upgrade_charm, self._on_upgrade_charm)
@@ -183,6 +195,11 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             self.on.identity_platform_admin_ui_relation_changed, self._on_peer_relation_changed
         )
         self.framework.observe(self.on.collect_unit_status, self._on_collect_status)
+
+        # resource patching
+        self.framework.observe(
+            self.resources_patch.on.patch_failed, self._on_resource_patch_failed
+        )
 
         self.framework.observe(self.ingress_requirer.on.ready, self._on_ingress_changed)
         self.framework.observe(self.ingress_requirer.on.revoked, self._on_ingress_changed)
@@ -316,6 +333,10 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
     def _on_smtp_data_available(self, event: SmtpDataAvailableEvent) -> None:
         self._holistic_handler(event)
 
+    def _on_resource_patch_failed(self, event: K8sResourcePatchFailedEvent) -> None:
+        logger.error(f"Failed to patch resource constraints: {event.message}")
+        self.unit.status = BlockedStatus(event.message)
+
     def _on_collect_status(self, event: CollectStatusEvent) -> None:  # noqa: C901
         """The central management of the charm operator's status."""
         if not container_connectivity(self):
@@ -421,6 +442,11 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
 
         event.log(f"Successfully created the identity: {res}")
         event.set_results({"identity-id": res})
+
+    def _resource_reqs_from_config(self) -> ResourceRequirements:
+        limits = {"cpu": self.model.config.get("cpu"), "memory": self.model.config.get("memory")}
+        requests = {"cpu": "100m", "mem": "200Mi"}
+        return adjust_resource_requirements(limits, requests, adhere_to_requests=True)
 
 
 if __name__ == "__main__":

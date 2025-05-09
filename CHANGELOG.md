@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.2](https://github.com/canonical/identity-platform-admin-ui-operator/compare/v1.1.1...v1.1.2) (2025-05-09)
+
+
+### Bug Fixes
+
+* add pod resource constraints ([67f6da1](https://github.com/canonical/identity-platform-admin-ui-operator/commit/67f6da14c9eb5c7e398b037e6ebb74ddad96dbad))
+* fix the openfga integration ([bf3e8dd](https://github.com/canonical/identity-platform-admin-ui-operator/commit/bf3e8ddaa49b4e48adfaa7b919a6fba6c80f54fb))
+
 ## [1.1.1](https://github.com/canonical/identity-platform-admin-ui-operator/compare/v1.1.0...v1.1.1) (2025-03-31)
 
 

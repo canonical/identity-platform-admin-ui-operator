@@ -4,8 +4,10 @@
 """Constants for the charm."""
 
 from pathlib import PurePath
+from string import Template
 
 # Charm constants
+POSTGRESQL_DSN_TEMPLATE = Template("postgres://$username:$password@$endpoint/$database")
 WORKLOAD_CONTAINER = "admin-ui"
 WORKLOAD_SERVICE = "admin-ui"
 
@@ -21,6 +23,7 @@ OAUTH_CALLBACK_PATH = "api/v0/auth/callback"
 DEFAULT_ACCESS_TOKEN_VERIFICATION_STRATEGY = "userinfo"
 
 # Integration constants
+DATABASE_INTEGRATION_NAME = "pg-database"
 PROMETHEUS_SCRAPE_INTEGRATION_NAME = "metrics-endpoint"
 LOKI_API_PUSH_INTEGRATION_NAME = "logging"
 GRAFANA_DASHBOARD_INTEGRATION_NAME = "grafana-dashboard"

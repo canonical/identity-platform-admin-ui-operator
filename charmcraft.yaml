@@ -28,6 +28,10 @@ resources:
     upstream-source: ghcr.io/canonical/identity-platform-admin-ui:v1.22.0
 
 requires:
+  pg-database:
+    interface: postgresql_client
+    limit: 1
+    optional: false
   hydra-endpoint-info:
     interface: hydra_endpoints
     limit: 1

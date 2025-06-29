@@ -9,6 +9,7 @@ from ops.charm import CharmBase
 
 from constants import (
     CERTIFICATE_TRANSFER_INTEGRATION_NAME,
+    DATABASE_INTEGRATION_NAME,
     HYDRA_ENDPOINTS_INTEGRATION_NAME,
     INGRESS_INTEGRATION_NAME,
     KRATOS_INFO_INTEGRATION_NAME,
@@ -55,6 +56,7 @@ ingress_integration_exists = integration_existence(INGRESS_INTEGRATION_NAME)
 oauth_integration_exists = integration_existence(OAUTH_INTEGRATION_NAME)
 cert_transfer_integration_exists = integration_existence(CERTIFICATE_TRANSFER_INTEGRATION_NAME)
 smtp_integration_exists = integration_existence(SMTP_INTEGRATION_NAME)
+database_integration_exists = integration_existence(DATABASE_INTEGRATION_NAME)
 
 
 def container_connectivity(charm: CharmBase) -> bool:
@@ -81,6 +83,14 @@ def openfga_model_readiness(charm: CharmBase) -> bool:
     return bool(charm.peer_data[charm._workload_service.version])
 
 
+def migration_needed_on_non_leader(charm: CharmBase) -> bool:
+    return charm.migration_needed and not charm.unit.is_leader()
+
+
+def migration_needed_on_leader(charm: CharmBase) -> bool:
+    return charm.migration_needed and charm.unit.is_leader()
+
+
 # Condition failure causes early return without doing anything
 NOOP_CONDITIONS: tuple[Condition, ...] = (
     kratos_integration_exists,
@@ -89,6 +99,7 @@ NOOP_CONDITIONS: tuple[Condition, ...] = (
     openfga_integration_exists,
     ingress_integration_exists,
     ca_certificate_exists,
+    database_integration_exists,
 )
 
 

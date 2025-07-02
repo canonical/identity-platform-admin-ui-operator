@@ -5,7 +5,7 @@ import logging
 from collections import ChainMap
 from pathlib import PurePath
 
-from ops.model import Container, Unit
+from ops.model import Container, ModelError, Unit
 from ops.pebble import Layer, LayerDict
 
 from cli import CommandLine
@@ -71,6 +71,15 @@ class WorkloadService:
             return
         else:
             self._version = version
+
+    @property
+    def is_running(self) -> bool:
+        try:
+            workload_service = self._container.get_service(WORKLOAD_CONTAINER)
+        except ModelError:
+            return False
+
+        return workload_service.is_running()
 
     def open_port(self) -> None:
         self._unit.open_port(protocol="tcp", port=ADMIN_SERVICE_PORT)

@@ -12,6 +12,7 @@ from ops.pebble import Error, ExecError
 
 from constants import WORKLOAD_SERVICE
 from env_vars import EnvVars
+from exceptions import MigrationError
 
 VERSION_REGEX = re.compile(r"App Version:\s*(?P<version>\S+)\s*$")
 MODEL_REGEX = re.compile(r"Created model:\s*(?P<model>\S+)")
@@ -24,7 +25,7 @@ logger = logging.getLogger(__name__)
 class CmdExecConfig:
     service_context: Optional[str] = None
     environment: EnvVars = field(default_factory=dict)
-    timeout: int = 20
+    timeout: float = 20
     stdin: Optional[str | bytes | TextIO | BinaryIO] = None
 
 
@@ -38,7 +39,7 @@ class CommandLine:
         cmd = ["identity-platform-admin-ui", "version"]
 
         try:
-            stdout = self._run_cmd(cmd)
+            stdout, _ = self._run_cmd(cmd)
         except Error as err:
             logger.error("Failed to fetch the Admin Service version: %s", err)
             return None
@@ -64,7 +65,7 @@ class CommandLine:
         ]
 
         try:
-            stdout = self._run_cmd(cmd)
+            stdout, _ = self._run_cmd(cmd)
         except Error as err:
             logger.error("Failed to create the OpenFGA model: %s", err)
             return None
@@ -85,7 +86,7 @@ class CommandLine:
         ]
 
         try:
-            stdout = self._run_cmd(
+            stdout, _ = self._run_cmd(
                 cmd,
                 exec_config=CmdExecConfig(
                     service_context=WORKLOAD_SERVICE, stdin=json.dumps(identity)
@@ -98,18 +99,76 @@ class CommandLine:
         matched = IDENTITY_REGEX.search(stdout)
         return matched.group("identity") if matched else None
 
+    def migrate_up(self, dsn: str, timeout: float = 120) -> None:
+        cmd = [
+            "identity-platform-admin-ui",
+            "migrate",
+            "--dsn",
+            dsn,
+            "up",
+        ]
+
+        try:
+            self._run_cmd(
+                cmd,
+                exec_config=CmdExecConfig(service_context=WORKLOAD_SERVICE, timeout=timeout),
+            )
+        except Error as err:
+            logger.error("Failed to migrate up the admin-ui service: %s", err)
+            raise MigrationError from err
+
+    def migrate_down(self, dsn: str, version: Optional[str] = None, timeout: float = 120) -> None:
+        cmd = [
+            "identity-platform-admin-ui",
+            "migrate",
+            "--dsn",
+            dsn,
+            "down",
+        ]
+
+        if version:
+            cmd.extend([version])
+
+        try:
+            self._run_cmd(
+                cmd,
+                exec_config=CmdExecConfig(service_context=WORKLOAD_SERVICE, timeout=timeout),
+            )
+        except Error as err:
+            logger.error("Failed to migrate down the admin-ui service: %s", err)
+            raise MigrationError from err
+
+    def migrate_status(self, dsn: str) -> Optional[str]:
+        cmd = [
+            "identity-platform-admin-ui",
+            "migrate",
+            "--dsn",
+            dsn,
+            "status",
+        ]
+
+        try:
+            _, stderr = self._run_cmd(
+                cmd,
+                exec_config=CmdExecConfig(service_context=WORKLOAD_SERVICE),
+            )
+            return stderr
+        except Error as err:
+            logger.error("Failed to fetch migration status: %s", err)
+            return None
+
     def _run_cmd(
         self,
         cmd: List[str],
         exec_config: CmdExecConfig = CmdExecConfig(),
-    ) -> str:
+    ) -> tuple[str, str]:
         logger.debug(f"Running command: {cmd}")
 
         process = self.container.exec(cmd, **asdict(exec_config))
         try:
-            stdout, _ = process.wait_output()
+            stdout, stderr = process.wait_output()
         except ExecError as err:
             logger.error("Exited with code: %d. Error: %s", err.exit_code, err.stderr)
             raise
 
-        return stdout
+        return stdout, stderr if stderr else ""

@@ -81,7 +81,7 @@ from constants import (
     TEMPO_TRACING_INTEGRATION_NAME,
     WORKLOAD_CONTAINER,
 )
-from exceptions import PebbleError
+from exceptions import MigrationError, PebbleError
 from integrations import (
     DatabaseConfig,
     HydraData,
@@ -282,9 +282,22 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             self._on_smtp_data_available,
         )
 
+        # actions
         self.framework.observe(
             self.on.create_identity_action,
             self._on_create_identity_action,
+        )
+        self.framework.observe(
+            self.on.run_migration_up_action,
+            self._on_run_migration_up_action,
+        )
+        self.framework.observe(
+            self.on.run_migration_down_action,
+            self._on_run_migration_down_action,
+        )
+        self.framework.observe(
+            self.on.run_migration_status_action,
+            self._on_run_migration_status_action,
         )
 
     def _on_admin_ui_pebble_ready(self, event: WorkloadEvent) -> None:
@@ -313,6 +326,8 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             self.openfga_integration.openfga_integration_data
         )
         self.peer_data[self._workload_service.version] = {"openfga_model_id": openfga_model_id}
+
+        self._holistic_handler(event)
 
     def _on_ingress_changed(
         self, event: IngressPerAppReadyEvent | IngressPerAppRevokedEvent
@@ -368,37 +383,13 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         self.unit.status = BlockedStatus(event.message)
 
     def _on_database_created(self, event: DatabaseCreatedEvent) -> None:
-        # if not container_connectivity(self):
-        #     self.unit.status = WaitingStatus("Container is not connected yet")
-        #     event.defer()
-        #     return
-
-        # if not peer_integration_exists(self):
-        #     self.unit.status = WaitingStatus(f"Missing integration {PEER_INTEGRATION_NAME}")
-        #     event.defer()
-        #     return
-
-        # if not self.migration_needed:
-        #     self._holistic_handler(event)
-        #     return
-
         if not self.unit.is_leader():
             logger.info(
                 "Unit does not have leadership. Wait for leader unit to run the migration."
             )
-            self.unit.status = WaitingStatus("Waiting for leader unit to run the migration")
             event.defer()
             return
 
-        # try:
-        #     self._cli.migrate(DatabaseConfig.load(self.database_requirer).dsn)
-        # except MigrationError:
-        #     self.unit.status = BlockedStatus("Database migration failed")
-        #     logger.error("Auto migration job failed. Please use the run-migration action")
-        #     return
-
-        # migration_version = DatabaseConfig.load(self.database_requirer).migration_version
-        # self.peer_data[migration_version] = self._workload_service.version
         self._holistic_handler(event)
 
     def _on_database_changed(self, event: DatabaseEndpointsChangedEvent) -> None:
@@ -444,7 +435,11 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             event.add_status(BlockedStatus(f"Missing integration {DATABASE_INTEGRATION_NAME}"))
 
         if migration_needed_on_leader(self):
-            event.add_status(BlockedStatus("Database migration is required"))
+            event.add_status(
+                BlockedStatus(
+                    "Either Database migration is required, or the migration job is failed. Please check juju logs"
+                )
+            )
 
         if migration_needed_on_non_leader(self):
             event.add_status(WaitingStatus("Waiting for leader unit to run the migration"))
@@ -473,10 +468,18 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
 
         if self.migration_needed:
             if not self.unit.is_leader():
+                logger.info(
+                    "Unit does not have leadership. Wait for leader unit to run the migration."
+                )
                 event.defer()
                 return
 
-            logger.info("Migrating database...")
+            try:
+                self._cli.migrate_up(dsn=DatabaseConfig.load(self.database_requirer).dsn)
+            except MigrationError:
+                logger.error("Auto migration job failed. Please use the run-migration-up action")
+                return
+
             migration_version = DatabaseConfig.load(self.database_requirer).migration_version
             self.peer_data[migration_version] = self._workload_service.version
 
@@ -540,6 +543,87 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
 
         event.log(f"Successfully created the identity: {res}")
         event.set_results({"identity-id": res})
+
+    def _on_run_migration_up_action(self, event: ActionEvent) -> None:
+        if not self.unit.is_leader():
+            event.fail("Non-leader unit cannot run migration action")
+            return
+
+        if not self._workload_service.is_running:
+            event.fail("Service is not ready. Please re-run the action when the charm is active")
+            return
+
+        if not peer_integration_exists(self):
+            event.fail("Peer integration is not ready yet")
+            return
+
+        event.log("Start migrating up the database")
+
+        db_config = DatabaseConfig.load(self.database_requirer)
+        timeout = float(event.params.get("timeout", 120))
+        try:
+            self._cli.migrate_up(dsn=db_config.dsn, timeout=timeout)
+        except MigrationError as err:
+            event.fail(f"Database migration up failed: {err}")
+            return
+        else:
+            event.log("Successfully migrated up the database")
+
+        migration_version = db_config.migration_version
+        self.peer_data[migration_version] = self._workload_service.version
+        event.log("Successfully updated migration version")
+
+        self._holistic_handler(event)
+
+    def _on_run_migration_down_action(self, event: ActionEvent) -> None:
+        if not self.unit.is_leader():
+            event.fail("Non-leader unit cannot run migration action")
+            return
+
+        if not self._workload_service.is_running:
+            event.fail("Service is not ready. Please re-run the action when the charm is active")
+            return
+
+        if not peer_integration_exists(self):
+            event.fail("Peer integration is not ready yet")
+            return
+
+        event.log("Start migrating down the database")
+
+        db_config = DatabaseConfig.load(self.database_requirer)
+        timeout = float(event.params.get("timeout", 120))
+        version = event.params.get("version")
+        try:
+            self._cli.migrate_down(
+                dsn=db_config.dsn,
+                version=version,
+                timeout=timeout,
+            )
+        except MigrationError as err:
+            event.fail(f"Database migration down failed: {err}")
+            return
+        else:
+            event.log("Successfully migrated down the database")
+
+        migration_version = db_config.migration_version
+        self.peer_data[migration_version] = self._workload_service.version
+        event.log("Successfully updated migration version")
+
+        self._holistic_handler(event)
+
+    def _on_run_migration_status_action(self, event: ActionEvent) -> None:
+        if not self._workload_service.is_running:
+            event.fail("Service is not ready. Please re-run the action when the charm is active")
+            return
+
+        if not (
+            status := self._cli.migrate_status(dsn=DatabaseConfig.load(self.database_requirer).dsn)
+        ):
+            event.fail("Failed to fetch the status of all database migrations")
+            return
+
+        event.log("Successfully fetch the status of all database migrations")
+        event.set_results({"status": status})
 
     def _resource_reqs_from_config(self) -> ResourceRequirements:
         limits = {"cpu": self.model.config.get("cpu"), "memory": self.model.config.get("memory")}

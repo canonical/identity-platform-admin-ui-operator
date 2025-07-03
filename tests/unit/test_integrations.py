@@ -3,13 +3,16 @@
 
 # Learn more about testing at: https://juju.is/docs/sdk/testing
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
+from charms.data_platform_libs.v0.data_interfaces import DatabaseRequires
 from ops.testing import Harness
 from pytest_mock import MockerFixture
 
+from constants import POSTGRESQL_DSN_TEMPLATE
 from integrations import (
+    DatabaseConfig,
     OAuthIntegration,
     OAuthProviderData,
     OpenFGAIntegration,
@@ -51,6 +54,60 @@ class TestPeerData:
     def test_pop(self, harness: Harness, peer_integration: int, peer_data: PeerData) -> None:
         assert peer_data.pop("key") == "val"
         assert peer_data["key"] == {}
+
+
+class TestDatabaseConfig:
+    @pytest.fixture
+    def database_config(self) -> DatabaseConfig:
+        return DatabaseConfig(
+            username="username",
+            password="password",
+            endpoint="endpoint",
+            database="database",
+            migration_version="migration_version",
+        )
+
+    @pytest.fixture
+    def mocked_requirer(self) -> MagicMock:
+        return create_autospec(DatabaseRequires)
+
+    def test_dsn(self, database_config: DatabaseConfig) -> None:
+        expected = POSTGRESQL_DSN_TEMPLATE.substitute(
+            username="username",
+            password="password",
+            endpoint="endpoint",
+            database="database",
+        )
+
+        actual = database_config.dsn
+        assert actual == expected
+
+    def test_to_env_vars(self, database_config: DatabaseConfig) -> None:
+        env_vars = database_config.to_env_vars()
+        assert env_vars["DSN"] == database_config.dsn
+
+    def test_load_with_integration(self, mocked_requirer: MagicMock) -> None:
+        mocked_requirer.relations = [MagicMock(id=1)]
+        mocked_requirer.database = "database"
+        mocked_requirer.fetch_relation_data.return_value = {
+            1: {"endpoints": "endpoint", "username": "username", "password": "password"}
+        }
+
+        actual = DatabaseConfig.load(mocked_requirer)
+        assert actual == DatabaseConfig(
+            username="username",
+            password="password",
+            endpoint="endpoint",
+            database="database",
+            migration_version="migration_version_1",
+        )
+
+    def test_load_without_integration(self, mocked_requirer: MagicMock) -> None:
+        mocked_requirer.database = "database"
+        mocked_requirer.relations = []
+
+        actual = DatabaseConfig.load(mocked_requirer)
+        assert actual == DatabaseConfig()
 
 
 class TestOpenFGAIntegration:

@@ -383,13 +383,6 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         self.unit.status = BlockedStatus(event.message)
 
     def _on_database_created(self, event: DatabaseCreatedEvent) -> None:
-        if not self.unit.is_leader():
-            logger.info(
-                "Unit does not have leadership. Wait for leader unit to run the migration."
-            )
-            event.defer()
-            return
-
         self._holistic_handler(event)
 
     def _on_database_changed(self, event: DatabaseEndpointsChangedEvent) -> None:
@@ -437,7 +430,7 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         if migration_needed_on_leader(self):
             event.add_status(
                 BlockedStatus(
-                    "Either Database migration is required, or the migration job is failed. Please check juju logs"
+                    "Either Database migration is required, or the migration job has failed. Please check juju logs"
                 )
             )
 
@@ -474,13 +467,14 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
                 event.defer()
                 return
 
+            database_config = DatabaseConfig.load(self.database_requirer)
             try:
-                self._cli.migrate_up(dsn=DatabaseConfig.load(self.database_requirer).dsn)
+                self._cli.migrate_up(dsn=database_config.dsn)
             except MigrationError:
                 logger.error("Auto migration job failed. Please use the run-migration-up action")
                 return
 
-            migration_version = DatabaseConfig.load(self.database_requirer).migration_version
+            migration_version = database_config.migration_version
             self.peer_data[migration_version] = self._workload_service.version
 
         try:
@@ -559,17 +553,17 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
 
         event.log("Start migrating up the database")
 
-        db_config = DatabaseConfig.load(self.database_requirer)
+        database_config = DatabaseConfig.load(self.database_requirer)
         timeout = float(event.params.get("timeout", 120))
         try:
-            self._cli.migrate_up(dsn=db_config.dsn, timeout=timeout)
+            self._cli.migrate_up(dsn=database_config.dsn, timeout=timeout)
         except MigrationError as err:
             event.fail(f"Database migration up failed: {err}")
             return
         else:
             event.log("Successfully migrated up the database")
 
-        migration_version = db_config.migration_version
+        migration_version = database_config.migration_version
         self.peer_data[migration_version] = self._workload_service.version
         event.log("Successfully updated migration version")
 
@@ -590,12 +584,12 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
 
         event.log("Start migrating down the database")
 
-        db_config = DatabaseConfig.load(self.database_requirer)
+        database_config = DatabaseConfig.load(self.database_requirer)
         timeout = float(event.params.get("timeout", 120))
         version = event.params.get("version")
         try:
             self._cli.migrate_down(
-                dsn=db_config.dsn,
+                dsn=database_config.dsn,
                 version=version,
                 timeout=timeout,
             )
@@ -605,7 +599,7 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         else:
             event.log("Successfully migrated down the database")
 
-        migration_version = db_config.migration_version
+        migration_version = database_config.migration_version
         self.peer_data[migration_version] = self._workload_service.version
         event.log("Successfully updated migration version")
 

@@ -59,6 +59,7 @@ async def integrate_dependencies(
         f"{ADMIN_SERVICE_APP}:hydra-endpoint-info",
         hydra_app_name,
     )
+    await ops_test.model.integrate(ADMIN_SERVICE_APP, DB_APP)
     await ops_test.model.integrate(f"{ADMIN_SERVICE_APP}:openfga", f"{OPENFGA_APP}:openfga")
     await ops_test.model.integrate(ADMIN_SERVICE_APP, public_ingress_name)
     await ops_test.model.integrate(f"{ADMIN_SERVICE_APP}:oauth", hydra_app_name)
@@ -141,6 +142,11 @@ async def leader_oauth_integration_data(app_integration_data: Callable) -> Optio
 @pytest_asyncio.fixture
 async def leader_smtp_integration_data(app_integration_data: Callable) -> Optional[dict]:
     return await app_integration_data(ADMIN_SERVICE_APP, "smtp")
+
+
+@pytest_asyncio.fixture
+async def leader_database_integration_data(app_integration_data: Callable) -> Optional[dict]:
+    return await app_integration_data(ADMIN_SERVICE_APP, "pg-database")
 
 
 @pytest.fixture

@@ -13,6 +13,7 @@ from pytest_mock import MockerFixture
 from charm import IdentityPlatformAdminUIOperatorCharm
 from constants import (
     CERTIFICATE_TRANSFER_INTEGRATION_NAME,
+    DATABASE_INTEGRATION_NAME,
     DEFAULT_CONTEXT_PATH,
     INGRESS_INTEGRATION_NAME,
     PEER_INTEGRATION_NAME,
@@ -138,6 +139,11 @@ def certificate_transfer_integration(harness: Harness) -> int:
 
 
 @pytest.fixture
+def database_integration(harness: Harness) -> int:
+    return harness.add_relation(DATABASE_INTEGRATION_NAME, "postgresql-k8s")
+
+
+@pytest.fixture
 def all_satisfied_conditions(mocker: MockerFixture) -> None:
     mocker.patch("charm.container_connectivity", return_value=True)
     mocker.patch("charm.peer_integration_exists", return_value=True)
@@ -146,6 +152,9 @@ def all_satisfied_conditions(mocker: MockerFixture) -> None:
     mocker.patch("charm.oauth_integration_exists", return_value=True)
     mocker.patch("charm.openfga_integration_exists", return_value=True)
     mocker.patch("charm.ingress_integration_exists", return_value=True)
+    mocker.patch("charm.database_integration_exists", return_value=True)
+    mocker.patch("charm.migration_needed_on_non_leader", return_value=False)
+    mocker.patch("charm.migration_needed_on_leader", return_value=False)
     mocker.patch("charm.ca_certificate_exists", return_value=True)
     mocker.patch("charm.smtp_integration_exists", return_value=True)
     mocker.patch("charm.openfga_store_readiness", return_value=True)

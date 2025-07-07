@@ -33,7 +33,6 @@ METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
 ADMIN_SERVICE_APP = METADATA["name"]
 ADMIN_SERVICE_IMAGE = METADATA["resources"]["oci-image"]["upstream-source"]
 DB_APP = "postgresql-k8s"
-OATHKEEPER_APP = "oathkeeper"
 OPENFGA_APP = "openfga-k8s"
 SMTP_INTEGRATOR_APP = "smtp-integrator"
 MAIL_APP = "mail"
@@ -64,7 +63,6 @@ async def integrate_dependencies(
     await ops_test.model.integrate(ADMIN_SERVICE_APP, public_ingress_name)
     await ops_test.model.integrate(f"{ADMIN_SERVICE_APP}:oauth", hydra_app_name)
     await ops_test.model.integrate(ADMIN_SERVICE_APP, self_signed_cert_app_name)
-    await ops_test.model.integrate(f"{ADMIN_SERVICE_APP}:oathkeeper-info", OATHKEEPER_APP)
     await ops_test.model.integrate(f"{ADMIN_SERVICE_APP}:smtp", f"{SMTP_INTEGRATOR_APP}:smtp")
 
 
@@ -117,11 +115,6 @@ async def leader_hydra_endpoint_integration_data(app_integration_data: Callable)
 @pytest_asyncio.fixture
 async def leader_openfga_integration_data(app_integration_data: Callable) -> Optional[dict]:
     return await app_integration_data(ADMIN_SERVICE_APP, "openfga")
-
-
-@pytest_asyncio.fixture
-async def leader_oathkeeper_integration_data(app_integration_data: Callable) -> Optional[dict]:
-    return await app_integration_data(ADMIN_SERVICE_APP, "oathkeeper-info")
 
 
 @pytest_asyncio.fixture

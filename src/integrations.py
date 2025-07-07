@@ -17,7 +17,6 @@ from charms.data_platform_libs.v0.data_interfaces import DatabaseRequires
 from charms.hydra.v0.hydra_endpoints import HydraEndpointsRequirer
 from charms.hydra.v0.oauth import ClientConfig, OAuthRequirer
 from charms.kratos.v0.kratos_info import KratosInfoRequirer
-from charms.oathkeeper.v0.oathkeeper_info import OathkeeperInfoRequirer
 from charms.openfga_k8s.v1.openfga import OpenFGARequires
 from charms.smtp_integrator.v0.smtp import AuthType, SmtpRequires
 from charms.tempo_k8s.v2.tracing import TracingEndpointRequirer
@@ -246,34 +245,6 @@ class HydraData:
 
         return HydraData(
             admin_url=endpoints["admin_endpoint"],
-        )
-
-
-@dataclass(frozen=True)
-class OathkeeperData:
-    """The data source from the Oathkeeper integration."""
-
-    public_url: str = ""
-    rules_configmap_name: str = ""
-    rules_configmap_namespace: str = ""
-
-    def to_env_vars(self) -> EnvVars:
-        return {
-            "OATHKEEPER_PUBLIC_URL": self.public_url,
-            "RULES_CONFIGMAP_NAME": self.rules_configmap_name,
-            "RULES_CONFIGMAP_NAMESPACE": self.rules_configmap_namespace,
-        }
-
-    @classmethod
-    def load(cls, requirer: OathkeeperInfoRequirer) -> "OathkeeperData":
-        if not requirer.is_ready():
-            return OathkeeperData()
-
-        data = requirer.get_oathkeeper_info() or {}
-        return OathkeeperData(
-            public_url=data.get("public_endpoint", ""),
-            rules_configmap_name=data.get("rules_configmap_name", ""),
-            rules_configmap_namespace=data.get("configmaps_namespace", ""),
         )
 
 

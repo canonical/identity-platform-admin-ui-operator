@@ -39,12 +39,6 @@ juju integrate identity-platform-admin-ui:kratos-info kratos
 juju integrate identity-platform-admin-ui:hydra-endpoint-info hydra
 ```
 
-### `oathkeeper_info` Integration
-
-```shell
-juju integrate identity-platform-admin-ui:oathkeeper-info oathkeeper
-```
-
 ### `openfga` Integration
 
 ```shell

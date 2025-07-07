@@ -42,9 +42,6 @@ requires:
     limit: 1
     description: |
       Receives a series of kratos' endpoint information.
-  oathkeeper-info:
-    interface: oathkeeper_info
-    limit: 1
   ingress:
     interface: ingress
     description: |

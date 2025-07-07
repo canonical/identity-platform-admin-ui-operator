@@ -353,7 +353,7 @@ class TLSCertificates:
             ca = {
                 integration.data[unit]["ca"]
                 for unit in integration.units
-                if "ca" in integration.data[unit]
+                if "ca" in integration.data.get(unit, {})
             }
             ca_certs.update(ca)
 

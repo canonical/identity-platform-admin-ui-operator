@@ -20,7 +20,6 @@ from charms.hydra.v0.hydra_endpoints import HydraEndpointsRequirer
 from charms.hydra.v0.oauth import OAuthInfoChangedEvent, OAuthRequirer
 from charms.kratos.v0.kratos_info import KratosInfoRequirer
 from charms.loki_k8s.v1.loki_push_api import LogForwarder
-from charms.oathkeeper.v0.oathkeeper_info import OathkeeperInfoRequirer
 from charms.observability_libs.v0.kubernetes_compute_resources_patch import (
     K8sResourcePatchFailedEvent,
     KubernetesComputeResourcesPatch,
@@ -64,7 +63,6 @@ from constants import (
     INGRESS_INTEGRATION_NAME,
     KRATOS_INFO_INTEGRATION_NAME,
     LOKI_API_PUSH_INTEGRATION_NAME,
-    OATHKEEPER_INFO_INTEGRATION_NAME,
     OAUTH_INTEGRATION_NAME,
     OPENFGA_INTEGRATION_NAME,
     OPENFGA_STORE_NAME,
@@ -79,7 +77,6 @@ from integrations import (
     HydraData,
     IngressData,
     KratosData,
-    OathkeeperData,
     OAuthIntegration,
     OpenFGAIntegration,
     OpenFGAModelData,
@@ -127,10 +124,6 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
 
         self.kratos_info_requirer = KratosInfoRequirer(
             self, relation_name=KRATOS_INFO_INTEGRATION_NAME
-        )
-
-        self.oathkeeper_info_requirer = OathkeeperInfoRequirer(
-            self, relation_name=OATHKEEPER_INFO_INTEGRATION_NAME
         )
 
         self.openfga_requirer = OpenFGARequires(
@@ -225,10 +218,6 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         )
         self.framework.observe(
             self.on[KRATOS_INFO_INTEGRATION_NAME].relation_broken,
-            self._on_config_changed,
-        )
-        self.framework.observe(
-            self.on[OATHKEEPER_INFO_INTEGRATION_NAME].relation_changed,
             self._on_config_changed,
         )
         self.framework.observe(
@@ -411,7 +400,6 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         kratos_data = KratosData.load(self.kratos_info_requirer)
         hydra_data = HydraData.load(self.hydra_endpoints_requirer)
         ingress_data = IngressData.load(self.ingress_requirer)
-        oathkeeper_data = OathkeeperData.load(self.oathkeeper_info_requirer)
         oauth_data = self.oauth_integration.oauth_provider_data
         tracing_data = TracingData.load(self.tracing_requirer)
         smtp_data = SmtpProviderData.load(self.smtp_requirer)
@@ -421,7 +409,6 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             kratos_data,
             hydra_data,
             ingress_data,
-            oathkeeper_data,
             oauth_data,
             openfga_integration_data,
             openfga_model_data,

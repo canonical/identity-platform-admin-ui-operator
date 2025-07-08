@@ -3,4 +3,4 @@ ipdb
 juju
 git+https://github.com/canonical/iam-bundle@oauth_tools-v0.1.2#egg=oauth_tools
 pytest
-pytest-operator==0.42.0
+pytest-operator==0.43.1

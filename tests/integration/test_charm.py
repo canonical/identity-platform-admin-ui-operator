@@ -72,7 +72,7 @@ async def test_build_and_deploy(
 
     await ops_test.model.deploy(
         entity_url=OPENFGA_APP,
-        channel="2.0/edge",
+        channel="latest/edge",
         series="jammy",
         trust=True,
     )

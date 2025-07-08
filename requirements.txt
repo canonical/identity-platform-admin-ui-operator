@@ -1,4 +1,4 @@
 cosl
 lightkube
-ops <2.23.1
+ops <3.0.1
 pydantic >= 2

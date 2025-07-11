@@ -36,6 +36,7 @@ from pytest_operator.plugin import OpsTest
 
 from constants import (
     CERTIFICATE_TRANSFER_INTEGRATION_NAME,
+    DATABASE_INTEGRATION_NAME,
     HYDRA_ENDPOINTS_INTEGRATION_NAME,
     INGRESS_INTEGRATION_NAME,
     KRATOS_INFO_INTEGRATION_NAME,
@@ -169,6 +170,10 @@ async def test_smtp_integration(
     assert leader_smtp_integration_data["port"] == str(MAIL_SMTP_PORT)
 
 
+async def test_database_integration(leader_database_integration_data: Optional[dict]) -> None:
+    assert leader_database_integration_data
+
+
 async def test_create_identity_action(admin_service_unit: Unit) -> None:
     action = await admin_service_unit.run_action(
         "create-identity",
@@ -281,6 +286,14 @@ async def test_remove_integration_certificate_transfer(
     async with remove_integration(
         ops_test, self_signed_certificates_app_name, CERTIFICATE_TRANSFER_INTEGRATION_NAME
     ):
+        assert "blocked" == admin_service_application.status
+
+
+async def test_remove_integration_database(
+    ops_test: OpsTest,
+    admin_service_application: Application,
+) -> None:
+    async with remove_integration(ops_test, DB_APP, DATABASE_INTEGRATION_NAME):
         assert "blocked" == admin_service_application.status
 
 

@@ -25,9 +25,13 @@ resources:
   oci-image:
     type: oci-image
     description: Identity Platform Admin UI oci-image
-    upstream-source: ghcr.io/canonical/identity-platform-admin-ui:v1.22.0
+    upstream-source: ghcr.io/canonical/identity-platform-admin-ui:v1.25.0
 
 requires:
+  pg-database:
+    interface: postgresql_client
+    limit: 1
+    optional: false
   hydra-endpoint-info:
     interface: hydra_endpoints
     limit: 1
@@ -134,7 +138,30 @@ actions:
       - schema
       - traits
     additionalProperties: false
-
+  run-migration-up:
+    description:
+      Run database migration up. Back up the database before
+      running this action.
+    params:
+      timeout:
+        description: Timeout after which the migration will be canceled.
+        type: number
+        default: 120
+  run-migration-down:
+    description:
+      Run database migration down. Back up the database before
+      running this action.
+    params:
+      timeout:
+        description: Timeout after which the migration will be canceled.
+        type: number
+        default: 120
+      version:
+        description: The specific version that database rolls back to.
+        type: string
+  run-migration-status:
+    description:
+      Print the status of all database migrations.
 
 platforms:
   ubuntu@22.04:amd64:

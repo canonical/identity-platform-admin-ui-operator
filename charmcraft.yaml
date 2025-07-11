@@ -25,7 +25,7 @@ resources:
   oci-image:
     type: oci-image
     description: Identity Platform Admin UI oci-image
-    upstream-source: ghcr.io/canonical/identity-platform-admin-ui:v1.22.0
+    upstream-source: ghcr.io/canonical/identity-platform-admin-ui:v1.25.0
 
 requires:
   hydra-endpoint-info:
@@ -38,9 +38,6 @@ requires:
     limit: 1
     description: |
       Receives a series of kratos' endpoint information.
-  oathkeeper-info:
-    interface: oathkeeper_info
-    limit: 1
   ingress:
     interface: ingress
     description: |

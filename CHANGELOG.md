@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.1.4](https://github.com/canonical/identity-platform-admin-ui-operator/compare/v1.1.3...v1.1.4) (2025-07-11)
+
+
+### Bug Fixes
+
+* fix the issue when certificate transfer integration is removed ([dae9017](https://github.com/canonical/identity-platform-admin-ui-operator/commit/dae9017cd1f365d7f041b1b0a558265b1c133dd8))
+* not use ops above 2.23.0 at this moment ([eafaa0a](https://github.com/canonical/identity-platform-admin-ui-operator/commit/eafaa0a674803e65d3340851f3f25f701d9dc42c))
+* not use ops above 2.23.0 at this moment ([f7af23e](https://github.com/canonical/identity-platform-admin-ui-operator/commit/f7af23eb831a876fc4f17775cda20aff823776b4))
+
 ## [1.1.3](https://github.com/canonical/identity-platform-admin-ui-operator/compare/v1.1.2...v1.1.3) (2025-05-09)
 
 

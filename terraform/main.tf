@@ -5,7 +5,7 @@
  * identity-platform-admin-ui charm using the Juju Terraform provider.
  */
 
-resource "juju_application" "admin_ui" {
+resource "juju_application" "application" {
   name        = var.app_name
   model       = var.model_name
   trust       = true

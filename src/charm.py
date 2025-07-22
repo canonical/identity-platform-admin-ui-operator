@@ -15,6 +15,11 @@ from charms.certificate_transfer_interface.v1.certificate_transfer import (
     CertificatesRemovedEvent,
     CertificateTransferRequires,
 )
+from charms.data_platform_libs.v0.data_interfaces import (
+    DatabaseCreatedEvent,
+    DatabaseEndpointsChangedEvent,
+    DatabaseRequires,
+)
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.hydra.v0.hydra_endpoints import HydraEndpointsRequirer
 from charms.hydra.v0.oauth import OAuthInfoChangedEvent, OAuthRequirer
@@ -46,6 +51,7 @@ from ops.charm import (
     CharmBase,
     CollectStatusEvent,
     ConfigChangedEvent,
+    RelationBrokenEvent,
     RelationChangedEvent,
     UpgradeCharmEvent,
     WorkloadEvent,
@@ -59,6 +65,7 @@ from configs import CharmConfig
 from constants import (
     ADMIN_SERVICE_PORT,
     CERTIFICATE_TRANSFER_INTEGRATION_NAME,
+    DATABASE_INTEGRATION_NAME,
     GRAFANA_DASHBOARD_INTEGRATION_NAME,
     HYDRA_ENDPOINTS_INTEGRATION_NAME,
     INGRESS_INTEGRATION_NAME,
@@ -74,8 +81,9 @@ from constants import (
     TEMPO_TRACING_INTEGRATION_NAME,
     WORKLOAD_CONTAINER,
 )
-from exceptions import PebbleError
+from exceptions import MigrationError, PebbleError
 from integrations import (
+    DatabaseConfig,
     HydraData,
     IngressData,
     KratosData,
@@ -95,10 +103,13 @@ from utils import (
     NOOP_CONDITIONS,
     ca_certificate_exists,
     container_connectivity,
+    database_integration_exists,
     hydra_integration_exists,
     ingress_integration_exists,
     kratos_integration_exists,
     leader_unit,
+    migration_needed_on_leader,
+    migration_needed_on_non_leader,
     oauth_integration_exists,
     openfga_integration_exists,
     openfga_model_readiness,
@@ -120,6 +131,13 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         self.peer_data = PeerData(self.model)
         self._pebble_service = PebbleService(self.unit)
         self._workload_service = WorkloadService(self.unit)
+
+        self.database_requirer = DatabaseRequires(
+            self,
+            relation_name=DATABASE_INTEGRATION_NAME,
+            database_name=f"{self.model.name}_{self.app.name}",
+            extra_user_roles="SUPERUSER",
+        )
 
         self.hydra_endpoints_requirer = HydraEndpointsRequirer(
             self, relation_name=HYDRA_ENDPOINTS_INTEGRATION_NAME
@@ -201,6 +219,18 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             self.resources_patch.on.patch_failed, self._on_resource_patch_failed
         )
 
+        # database
+        self.framework.observe(
+            self.database_requirer.on.database_created, self._on_database_created
+        )
+        self.framework.observe(
+            self.database_requirer.on.endpoints_changed, self._on_database_changed
+        )
+        self.framework.observe(
+            self.on[DATABASE_INTEGRATION_NAME].relation_broken,
+            self._on_database_integration_broken,
+        )
+
         self.framework.observe(self.ingress_requirer.on.ready, self._on_ingress_changed)
         self.framework.observe(self.ingress_requirer.on.revoked, self._on_ingress_changed)
         self.framework.observe(
@@ -252,9 +282,22 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             self._on_smtp_data_available,
         )
 
+        # actions
         self.framework.observe(
             self.on.create_identity_action,
             self._on_create_identity_action,
+        )
+        self.framework.observe(
+            self.on.run_migration_up_action,
+            self._on_run_migration_up_action,
+        )
+        self.framework.observe(
+            self.on.run_migration_down_action,
+            self._on_run_migration_down_action,
+        )
+        self.framework.observe(
+            self.on.run_migration_status_action,
+            self._on_run_migration_status_action,
         )
 
     def _on_admin_ui_pebble_ready(self, event: WorkloadEvent) -> None:
@@ -283,6 +326,8 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             self.openfga_integration.openfga_integration_data
         )
         self.peer_data[self._workload_service.version] = {"openfga_model_id": openfga_model_id}
+
+        self._holistic_handler(event)
 
     def _on_ingress_changed(
         self, event: IngressPerAppReadyEvent | IngressPerAppRevokedEvent
@@ -337,6 +382,15 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         logger.error(f"Failed to patch resource constraints: {event.message}")
         self.unit.status = BlockedStatus(event.message)
 
+    def _on_database_created(self, event: DatabaseCreatedEvent) -> None:
+        self._holistic_handler(event)
+
+    def _on_database_changed(self, event: DatabaseEndpointsChangedEvent) -> None:
+        self._holistic_handler(event)
+
+    def _on_database_integration_broken(self, event: RelationBrokenEvent) -> None:
+        self._holistic_handler(event)
+
     def _on_collect_status(self, event: CollectStatusEvent) -> None:  # noqa: C901
         """The central management of the charm operator's status."""
         if not container_connectivity(self):
@@ -370,6 +424,19 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         if not smtp_integration_exists(self):
             event.add_status(BlockedStatus(f"Missing integration {SMTP_INTEGRATION_NAME}"))
 
+        if not database_integration_exists(self):
+            event.add_status(BlockedStatus(f"Missing integration {DATABASE_INTEGRATION_NAME}"))
+
+        if migration_needed_on_leader(self):
+            event.add_status(
+                BlockedStatus(
+                    "Either Database migration is required, or the migration job has failed. Please check juju logs"
+                )
+            )
+
+        if migration_needed_on_non_leader(self):
+            event.add_status(WaitingStatus("Waiting for leader unit to run the migration"))
+
         if not openfga_store_readiness(self):
             event.add_status(WaitingStatus("OpenFGA store is not ready yet"))
 
@@ -392,6 +459,24 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         # Install the certificates in various event scenarios
         self._workload_service.push_ca_certs(self._ca_bundle)
 
+        if self.migration_needed:
+            if not self.unit.is_leader():
+                logger.info(
+                    "Unit does not have leadership. Wait for leader unit to run the migration."
+                )
+                event.defer()
+                return
+
+            database_config = DatabaseConfig.load(self.database_requirer)
+            try:
+                self._cli.migrate_up(dsn=database_config.dsn)
+            except MigrationError:
+                logger.error("Auto migration job failed. Please use the run-migration-up action")
+                return
+
+            migration_version = database_config.migration_version
+            self.peer_data[migration_version] = self._workload_service.version
+
         try:
             self._pebble_service.plan(self._pebble_layer)
         except PebbleError:
@@ -405,7 +490,16 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         return TLSCertificates.load(self.certificate_transfer_requirer).ca_bundle
 
     @property
+    def migration_needed(self) -> bool:
+        if not peer_integration_exists(self):
+            return False
+
+        database_config = DatabaseConfig.load(self.database_requirer)
+        return self.peer_data[database_config.migration_version] != self._workload_service.version
+
+    @property
     def _pebble_layer(self) -> Layer:
+        database_config = DatabaseConfig.load(self.database_requirer)
         openfga_integration_data = self.openfga_integration.openfga_integration_data
         openfga_model_data = OpenFGAModelData.load(self.peer_data[self._workload_service.version])  # type: ignore[arg-type]
         kratos_data = KratosData.load(self.kratos_info_requirer)
@@ -418,6 +512,7 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         charm_config = CharmConfig(self.config)
 
         return self._pebble_service.render_pebble_layer(
+            database_config,
             kratos_data,
             hydra_data,
             ingress_data,
@@ -442,6 +537,87 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
 
         event.log(f"Successfully created the identity: {res}")
         event.set_results({"identity-id": res})
+
+    def _on_run_migration_up_action(self, event: ActionEvent) -> None:
+        if not self.unit.is_leader():
+            event.fail("Non-leader unit cannot run migration action")
+            return
+
+        if not self._workload_service.is_running:
+            event.fail("Service is not ready. Please re-run the action when the charm is active")
+            return
+
+        if not peer_integration_exists(self):
+            event.fail("Peer integration is not ready yet")
+            return
+
+        event.log("Start migrating up the database")
+
+        database_config = DatabaseConfig.load(self.database_requirer)
+        timeout = float(event.params.get("timeout", 120))
+        try:
+            self._cli.migrate_up(dsn=database_config.dsn, timeout=timeout)
+        except MigrationError as err:
+            event.fail(f"Database migration up failed: {err}")
+            return
+        else:
+            event.log("Successfully migrated up the database")
+
+        migration_version = database_config.migration_version
+        self.peer_data[migration_version] = self._workload_service.version
+        event.log("Successfully updated migration version")
+
+        self._holistic_handler(event)
+
+    def _on_run_migration_down_action(self, event: ActionEvent) -> None:
+        if not self.unit.is_leader():
+            event.fail("Non-leader unit cannot run migration action")
+            return
+
+        if not self._workload_service.is_running:
+            event.fail("Service is not ready. Please re-run the action when the charm is active")
+            return
+
+        if not peer_integration_exists(self):
+            event.fail("Peer integration is not ready yet")
+            return
+
+        event.log("Start migrating down the database")
+
+        database_config = DatabaseConfig.load(self.database_requirer)
+        timeout = float(event.params.get("timeout", 120))
+        version = event.params.get("version")
+        try:
+            self._cli.migrate_down(
+                dsn=database_config.dsn,
+                version=version,
+                timeout=timeout,
+            )
+        except MigrationError as err:
+            event.fail(f"Database migration down failed: {err}")
+            return
+        else:
+            event.log("Successfully migrated down the database")
+
+        migration_version = database_config.migration_version
+        self.peer_data[migration_version] = self._workload_service.version
+        event.log("Successfully updated migration version")
+
+        self._holistic_handler(event)
+
+    def _on_run_migration_status_action(self, event: ActionEvent) -> None:
+        if not self._workload_service.is_running:
+            event.fail("Service is not ready. Please re-run the action when the charm is active")
+            return
+
+        if not (
+            status := self._cli.migrate_status(dsn=DatabaseConfig.load(self.database_requirer).dsn)
+        ):
+            event.fail("Failed to fetch the status of all database migrations")
+            return
+
+        event.log("Successfully fetch the status of all database migrations")
+        event.set_results({"status": status})
 
     def _resource_reqs_from_config(self) -> ResourceRequirements:
         limits = {"cpu": self.model.config.get("cpu"), "memory": self.model.config.get("memory")}

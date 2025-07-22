@@ -13,6 +13,7 @@ from urllib.parse import urlparse
 from charms.certificate_transfer_interface.v1.certificate_transfer import (
     CertificateTransferRequires,
 )
+from charms.data_platform_libs.v0.data_interfaces import DatabaseRequires
 from charms.hydra.v0.hydra_endpoints import HydraEndpointsRequirer
 from charms.hydra.v0.oauth import ClientConfig, OAuthRequirer
 from charms.kratos.v0.kratos_info import KratosInfoRequirer
@@ -32,6 +33,7 @@ from constants import (
     OAUTH_GRANT_TYPES,
     OAUTH_SCOPES,
     PEER_INTEGRATION_NAME,
+    POSTGRESQL_DSN_TEMPLATE,
 )
 from env_vars import EnvVars
 from exceptions import MissingCookieKey
@@ -80,6 +82,47 @@ class PeerData:
         return {
             "OAUTH2_AUTH_COOKIES_ENCRYPTION_KEY": key,
         }
+
+
+@dataclass(frozen=True, slots=True)
+class DatabaseConfig:
+    """The data source from the database integration."""
+
+    endpoint: str = ""
+    database: str = ""
+    username: str = ""
+    password: str = ""
+    migration_version: str = ""
+
+    @property
+    def dsn(self) -> str:
+        return POSTGRESQL_DSN_TEMPLATE.substitute(
+            username=self.username,
+            password=self.password,
+            endpoint=self.endpoint,
+            database=self.database,
+        )
+
+    def to_env_vars(self) -> EnvVars:
+        return {
+            "DSN": self.dsn,
+        }
+
+    @classmethod
+    def load(cls, requirer: DatabaseRequires) -> "DatabaseConfig":
+        if not (database_integrations := requirer.relations):
+            return cls()
+
+        integration_id = database_integrations[0].id
+        integration_data: dict[str, str] = requirer.fetch_relation_data()[integration_id]
+
+        return cls(
+            endpoint=integration_data.get("endpoints", "").split(",")[0],
+            database=requirer.database,
+            username=integration_data.get("username", ""),
+            password=integration_data.get("password", ""),
+            migration_version=f"migration_version_{integration_id}",
+        )
 
 
 @dataclass(frozen=True)

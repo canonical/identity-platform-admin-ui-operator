@@ -12,3 +12,7 @@ class PebbleError(CharmError):
 
 class MissingCookieKey(CharmError):
     """Error raised when no key is present in the databag."""
+
+
+class MigrationError(CharmError):
+    """Error for database migration."""

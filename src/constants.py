@@ -10,6 +10,8 @@ from string import Template
 POSTGRESQL_DSN_TEMPLATE = Template("postgres://$username:$password@$endpoint/$database")
 WORKLOAD_CONTAINER = "admin-ui"
 WORKLOAD_SERVICE = "admin-ui"
+COOKIES_ENCRYPTION_KEY = "cookies_key"
+OPENFGA_MODEL_ID = "openfga_model_id"
 
 # Application constants
 ADMIN_SERVICE_COMMAND = "/usr/bin/identity-platform-admin-ui serve"
@@ -37,6 +39,3 @@ INGRESS_INTEGRATION_NAME = "ingress"
 CERTIFICATE_TRANSFER_INTEGRATION_NAME = "receive-ca-cert"
 SMTP_INTEGRATION_NAME = "smtp"
 PEER_INTEGRATION_NAME = "identity-platform-admin-ui"
-
-# Peer data keys
-COOKIES_KEY = "cookies_key"

@@ -40,6 +40,7 @@ from constants import (
     INGRESS_INTEGRATION_NAME,
     KRATOS_INFO_INTEGRATION_NAME,
     OPENFGA_INTEGRATION_NAME,
+    OPENFGA_MODEL_ID,
 )
 
 pytest_plugins = ["oauth_tools.fixtures"]
@@ -139,7 +140,7 @@ async def test_peer_integration(
     assert leader_peer_integration_data[admin_service_version]
 
     openfga_model = json.loads(leader_peer_integration_data[admin_service_version])
-    assert openfga_model["openfga_model_id"]
+    assert openfga_model[OPENFGA_MODEL_ID]
 
 
 async def test_smtp_integration(

@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.2.0](https://github.com/canonical/identity-platform-admin-ui-operator/compare/v1.1.3...v1.2.0) (2025-07-22)
+
+
+### Features
+
+* add database support ([7164ac9](https://github.com/canonical/identity-platform-admin-ui-operator/commit/7164ac92319bc410a0934980803455b58de9868f))
+* add migration actions ([50c9948](https://github.com/canonical/identity-platform-admin-ui-operator/commit/50c994891048bf6405880331f51ad985ba0e4788))
+* update juju_application resource name ([bc3dcf8](https://github.com/canonical/identity-platform-admin-ui-operator/commit/bc3dcf824e2b0b1be503ef1d5d03001939582cfa))
+
+
+### Bug Fixes
+
+* fix the issue when certificate transfer integration is removed ([dae9017](https://github.com/canonical/identity-platform-admin-ui-operator/commit/dae9017cd1f365d7f041b1b0a558265b1c133dd8))
+* not use ops 3.0 at this moment ([c44b2c3](https://github.com/canonical/identity-platform-admin-ui-operator/commit/c44b2c352564b42cf6e4b994e36e5dcdac765683))
+* not use ops above 2.23.0 at this moment ([eafaa0a](https://github.com/canonical/identity-platform-admin-ui-operator/commit/eafaa0a674803e65d3340851f3f25f701d9dc42c))
+* not use ops above 2.23.0 at this moment ([f7af23e](https://github.com/canonical/identity-platform-admin-ui-operator/commit/f7af23eb831a876fc4f17775cda20aff823776b4))
+* use terraform module in deployment ([ab4b12b](https://github.com/canonical/identity-platform-admin-ui-operator/commit/ab4b12b2437bf197ff1881ed51016a8b34992510))
+
 ## [1.1.3](https://github.com/canonical/identity-platform-admin-ui-operator/compare/v1.1.2...v1.1.3) (2025-05-09)
 
 

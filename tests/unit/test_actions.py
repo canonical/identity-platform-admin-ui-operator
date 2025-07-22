@@ -26,7 +26,7 @@ class TestCreateIdentityAction:
                     },
                 )
             except ActionFailed as err:
-                assert "Failed to create the identity. Please check the juju logs" in err.message
+                assert "Failed to create the identity. Please check `juju logs`" in err.message
 
     def test_create_identity_success(self, harness: Harness) -> None:
         expected = "created-identity-id"

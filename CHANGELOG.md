@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.1](https://github.com/canonical/identity-platform-admin-ui-operator/compare/v1.2.0...v1.2.1) (2025-07-22)
+
+
+### Bug Fixes
+
+* remove the terraform state file ([3d87ee6](https://github.com/canonical/identity-platform-admin-ui-operator/commit/3d87ee62e35a7b8fd323683935ca6cfa8162cb20))
+* remove the terraform state file ([5c32eda](https://github.com/canonical/identity-platform-admin-ui-operator/commit/5c32eda7a853f5dad63d129b6bdf92f343ed6c51))
+
 ## [1.2.0](https://github.com/canonical/identity-platform-admin-ui-operator/compare/v1.1.3...v1.2.0) (2025-07-22)
 
 

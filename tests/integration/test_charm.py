@@ -15,7 +15,6 @@ from conftest import (
     DB_APP,
     MAIL_APP,
     MAIL_SMTP_PORT,
-    OATHKEEPER_APP,
     OPENFGA_APP,
     SMTP_INTEGRATOR_APP,
     integrate_dependencies,
@@ -81,13 +80,6 @@ async def test_build_and_deploy(
     await ops_test.model.wait_for_idle(apps=[OPENFGA_APP, DB_APP], status="active", timeout=5 * 60)
 
     await ops_test.model.deploy(
-        entity_url=OATHKEEPER_APP,
-        channel="latest/edge",
-        series="jammy",
-        trust=True,
-    )
-
-    await ops_test.model.deploy(
         entity_url=SMTP_INTEGRATOR_APP,
         channel="latest/edge",
         series="jammy",
@@ -104,10 +96,6 @@ async def test_build_and_deploy(
     await ops_test.model.wait_for_idle(
         status="active",
         timeout=10 * 60,
-        # TODO(nsklikas, natalian98): Remove this when oathkeeper is fixed, see:
-        # https://github.com/canonical/identity-platform-admin-ui-operator/actions/runs/10196346291/job/28208320429?pr=19/
-        # https://github.com/canonical/oathkeeper-operator/issues/63
-        raise_on_error=False,
     )
 
 
@@ -126,11 +114,6 @@ async def test_hydra_endpoint_integration(
 async def test_openfga_integration(leader_openfga_integration_data: Optional[dict]) -> None:
     assert leader_openfga_integration_data
     assert all(leader_openfga_integration_data.values())
-
-
-async def test_oathkeeper_integration(leader_oathkeeper_integration_data: Optional[dict]) -> None:
-    assert leader_oathkeeper_integration_data
-    assert all(leader_oathkeeper_integration_data.values())
 
 
 async def test_ingress_integration(

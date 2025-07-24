@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.2](https://github.com/canonical/identity-platform-admin-ui-operator/compare/v1.2.1...v1.2.2) (2025-07-24)
+
+
+### Bug Fixes
+
+* remove oathkeeper dependency ([bb1e755](https://github.com/canonical/identity-platform-admin-ui-operator/commit/bb1e755fc59f79e9ba9403c9d2d2cbf5ee16f799))
+
 ## [1.2.1](https://github.com/canonical/identity-platform-admin-ui-operator/compare/v1.2.0...v1.2.1) (2025-07-22)
 
 

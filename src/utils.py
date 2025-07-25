@@ -15,6 +15,7 @@ from constants import (
     KRATOS_INFO_INTEGRATION_NAME,
     OAUTH_INTEGRATION_NAME,
     OPENFGA_INTEGRATION_NAME,
+    OPENFGA_MODEL_ID,
     PEER_INTEGRATION_NAME,
     SMTP_INTEGRATION_NAME,
     WORKLOAD_CONTAINER,
@@ -80,7 +81,12 @@ def openfga_store_readiness(charm: CharmBase) -> bool:
 
 
 def openfga_model_readiness(charm: CharmBase) -> bool:
-    return bool(charm.peer_data[charm._workload_service.version])
+    version = charm._workload_service.version
+
+    if not (openfga_model := charm.peer_data[version]):
+        return False
+
+    return bool(openfga_model.get(OPENFGA_MODEL_ID))
 
 
 def migration_needed_on_non_leader(charm: CharmBase) -> bool:
@@ -91,7 +97,7 @@ def migration_needed_on_leader(charm: CharmBase) -> bool:
     return charm.migration_needed and charm.unit.is_leader()
 
 
-# Condition failure causes early return without doing anything
+# Condition failure causes early returns without doing anything
 NOOP_CONDITIONS: tuple[Condition, ...] = (
     kratos_integration_exists,
     hydra_integration_exists,

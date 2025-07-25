@@ -17,6 +17,7 @@ from constants import (
     KRATOS_INFO_INTEGRATION_NAME,
     OAUTH_INTEGRATION_NAME,
     OPENFGA_INTEGRATION_NAME,
+    OPENFGA_MODEL_ID,
     PEER_INTEGRATION_NAME,
     SMTP_INTEGRATION_NAME,
     WORKLOAD_CONTAINER,
@@ -111,7 +112,7 @@ class TestUpgradeCharmEvent:
 
         mocked_openfga_model_creation.assert_called_once()
         assert harness.charm.peer_data[mocked_workload_service_version.return_value] == {
-            "openfga_model_id": mocked_openfga_model_creation.return_value
+            OPENFGA_MODEL_ID: mocked_openfga_model_creation.return_value
         }
         mocked_charm_holistic_handler.assert_called_once()
 
@@ -187,7 +188,7 @@ class TestOpenFGAStoreCreatedEvent:
 
         mocked_openfga_model_creation.assert_called_once()
         assert harness.charm.peer_data[mocked_workload_service_version.return_value] == {
-            "openfga_model_id": mocked_openfga_model_creation.return_value
+            OPENFGA_MODEL_ID: mocked_openfga_model_creation.return_value
         }
         mocked_charm_holistic_handler.assert_called_once()
 
@@ -201,14 +202,14 @@ class TestOpenFGAStoreRemovedEvent:
         mocked_charm_holistic_handler: MagicMock,
     ) -> None:
         harness.charm.peer_data[mocked_workload_service_version.return_value] = {
-            "openfga_model_id": "model_id"
+            OPENFGA_MODEL_ID: "model_id"
         }
         harness.set_leader(False)
 
         harness.charm.openfga_requirer.on.openfga_store_removed.emit()
 
         assert harness.charm.peer_data[mocked_workload_service_version.return_value] == {
-            "openfga_model_id": "model_id"
+            OPENFGA_MODEL_ID: "model_id"
         }, "Follower unit should not clean up peer data"
         mocked_charm_holistic_handler.assert_called_once()
 
@@ -220,7 +221,7 @@ class TestOpenFGAStoreRemovedEvent:
         mocked_charm_holistic_handler: MagicMock,
     ) -> None:
         harness.charm.peer_data[mocked_workload_service_version.return_value] = {
-            "openfga_model_id": "model_id"
+            OPENFGA_MODEL_ID: "model_id"
         }
 
         harness.charm.openfga_requirer.on.openfga_store_removed.emit()
@@ -677,7 +678,7 @@ class TestCollectStatusEvent:
                 "openfga_model_readiness",
                 False,
                 WaitingStatus,
-                "OpenFGA model is not ready yet",
+                "OpenFGA model is not ready yet. If this persists, check `juju logs` for errors",
             ),
         ],
     )

@@ -26,11 +26,12 @@ from ops.model import Model
 from constants import (
     ADMIN_SERVICE_PORT,
     CERTIFICATE_TRANSFER_INTEGRATION_NAME,
-    COOKIES_KEY,
+    COOKIES_ENCRYPTION_KEY,
     DEFAULT_ACCESS_TOKEN_VERIFICATION_STRATEGY,
     OAUTH_CALLBACK_PATH,
     OAUTH_GRANT_TYPES,
     OAUTH_SCOPES,
+    OPENFGA_MODEL_ID,
     PEER_INTEGRATION_NAME,
     POSTGRESQL_DSN_TEMPLATE,
 )
@@ -69,11 +70,11 @@ class PeerData:
         if not self._model.unit.is_leader():
             return
 
-        if not self[COOKIES_KEY]:
-            self[COOKIES_KEY] = secrets.token_hex(16)
+        if not self[COOKIES_ENCRYPTION_KEY]:
+            self[COOKIES_ENCRYPTION_KEY] = secrets.token_hex(16)
 
     def to_env_vars(self) -> EnvVars:
-        key = self[COOKIES_KEY]
+        key = self[COOKIES_ENCRYPTION_KEY]
         if not isinstance(key, str):
             logger.error("No cookie key found in the databag.")
             raise MissingCookieKey()
@@ -138,7 +139,7 @@ class OpenFGAModelData:
     @classmethod
     def load(cls, source: Mapping[str, Any]) -> "OpenFGAModelData":
         return OpenFGAModelData(
-            model_id=source.get("openfga_model_id", ""),
+            model_id=source.get(OPENFGA_MODEL_ID, ""),
         )
 
 

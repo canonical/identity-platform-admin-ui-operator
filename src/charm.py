@@ -72,6 +72,7 @@ from constants import (
     LOKI_API_PUSH_INTEGRATION_NAME,
     OAUTH_INTEGRATION_NAME,
     OPENFGA_INTEGRATION_NAME,
+    OPENFGA_MODEL_ID,
     OPENFGA_STORE_NAME,
     PEER_INTEGRATION_NAME,
     PROMETHEUS_SCRAPE_INTEGRATION_NAME,
@@ -311,10 +312,14 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         if not openfga_store_readiness(self):
             return
 
-        openfga_model_id = self._workload_service.create_openfga_model(
-            self.openfga_integration.openfga_integration_data
-        )
-        self.peer_data[self._workload_service.version] = {"openfga_model_id": openfga_model_id}
+        if not (
+            openfga_model_id := self._workload_service.create_openfga_model(
+                self.openfga_integration.openfga_integration_data
+            )
+        ):
+            logger.error("Failed to create an OpenFGA model")
+
+        self.peer_data[self._workload_service.version] = {OPENFGA_MODEL_ID: openfga_model_id}
 
         self._holistic_handler(event)
 
@@ -344,10 +349,14 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             return
 
         if self.unit.is_leader():
-            openfga_model_id = self._workload_service.create_openfga_model(
-                self.openfga_integration.openfga_integration_data
-            )
-            self.peer_data[self._workload_service.version] = {"openfga_model_id": openfga_model_id}
+            if not (
+                openfga_model_id := self._workload_service.create_openfga_model(
+                    self.openfga_integration.openfga_integration_data
+                )
+            ):
+                logger.error("Failed to create an OpenFGA model")
+
+            self.peer_data[self._workload_service.version] = {OPENFGA_MODEL_ID: openfga_model_id}
 
         self._holistic_handler(event)
 
@@ -430,7 +439,11 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             event.add_status(WaitingStatus("OpenFGA store is not ready yet"))
 
         if not openfga_model_readiness(self):
-            event.add_status(WaitingStatus("OpenFGA model is not ready yet"))
+            event.add_status(
+                WaitingStatus(
+                    "OpenFGA model is not ready yet. If this persists, check `juju logs` for errors"
+                )
+            )
 
         event.add_status(ActiveStatus())
 
@@ -519,7 +532,7 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         password = event.params["password"]
 
         if not (res := self._cli.create_identity(traits, schema_id=schema_id, password=password)):
-            event.fail("Failed to create the identity. Please check the juju logs")
+            event.fail("Failed to create the identity. Please check `juju logs`")
             return
 
         event.log(f"Successfully created the identity: {res}")

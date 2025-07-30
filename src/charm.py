@@ -312,13 +312,9 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         if not openfga_store_readiness(self):
             return
 
-        if not (
-            openfga_model_id := self._workload_service.create_openfga_model(
-                self.openfga_integration.openfga_integration_data
-            )
-        ):
-            logger.error("Failed to create an OpenFGA model")
-
+        openfga_model_id = self._workload_service.create_openfga_model(
+            self.openfga_integration.openfga_integration_data
+        )
         self.peer_data[self._workload_service.version] = {OPENFGA_MODEL_ID: openfga_model_id}
 
         self._holistic_handler(event)
@@ -349,13 +345,9 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             return
 
         if self.unit.is_leader():
-            if not (
-                openfga_model_id := self._workload_service.create_openfga_model(
-                    self.openfga_integration.openfga_integration_data
-                )
-            ):
-                logger.error("Failed to create an OpenFGA model")
-
+            openfga_model_id = self._workload_service.create_openfga_model(
+                self.openfga_integration.openfga_integration_data
+            )
             self.peer_data[self._workload_service.version] = {OPENFGA_MODEL_ID: openfga_model_id}
 
         self._holistic_handler(event)

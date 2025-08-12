@@ -10,6 +10,7 @@ import logging
 from functools import cached_property
 from typing import Any
 
+import ops
 from charms.certificate_transfer_interface.v1.certificate_transfer import (
     CertificatesAvailableEvent,
     CertificatesRemovedEvent,
@@ -74,6 +75,7 @@ from constants import (
     OPENFGA_INTEGRATION_NAME,
     OPENFGA_MODEL_ID,
     OPENFGA_STORE_NAME,
+    PEBBLE_READY_CHECK_NAME,
     PEER_INTEGRATION_NAME,
     PROMETHEUS_SCRAPE_INTEGRATION_NAME,
     SMTP_INTEGRATION_NAME,
@@ -201,6 +203,13 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         )
 
         self.framework.observe(self.on.admin_ui_pebble_ready, self._on_admin_ui_pebble_ready)
+        self.framework.observe(
+            self.on.admin_ui_pebble_check_failed, self._on_admin_ui_pebble_check_failed
+        )
+        self.framework.observe(
+            self.on.admin_ui_pebble_check_recovered,
+            self._on_admin_ui_pebble_check_recovered,
+        )
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.upgrade_charm, self._on_upgrade_charm)
         self.framework.observe(
@@ -381,9 +390,17 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
     def _on_database_integration_broken(self, event: RelationBrokenEvent) -> None:
         self._holistic_handler(event)
 
+    def _on_admin_ui_pebble_check_failed(self, event: ops.PebbleCheckFailedEvent) -> None:
+        if event.info.name == PEBBLE_READY_CHECK_NAME:
+            logger.warning("The service is not running")
+
+    def _on_admin_ui_pebble_check_recovered(self, event: ops.PebbleCheckRecoveredEvent) -> None:
+        if event.info.name == PEBBLE_READY_CHECK_NAME:
+            logger.info("The service is online again")
+
     def _on_collect_status(self, event: CollectStatusEvent) -> None:  # noqa: C901
         """The central management of the charm operator's status."""
-        if not container_connectivity(self):
+        if not (can_connect := container_connectivity(self)):
             event.add_status(WaitingStatus("Container is not connected yet"))
 
         if not peer_integration_exists(self):
@@ -426,6 +443,13 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
 
         if migration_needed_on_non_leader(self):
             event.add_status(WaitingStatus("Waiting for leader unit to run the migration"))
+
+        if can_connect and not self._workload_service.is_running():
+            event.add_status(
+                BlockedStatus(
+                    f"Failed to start the service, please check the {WORKLOAD_CONTAINER} container logs"
+                )
+            )
 
         if not openfga_store_readiness(self):
             event.add_status(WaitingStatus("OpenFGA store is not ready yet"))
@@ -535,7 +559,7 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             event.fail("Non-leader unit cannot run migration action")
             return
 
-        if not self._workload_service.is_running:
+        if not self._workload_service.is_running():
             event.fail("Service is not ready. Please re-run the action when the charm is active")
             return
 
@@ -566,7 +590,7 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
             event.fail("Non-leader unit cannot run migration action")
             return
 
-        if not self._workload_service.is_running:
+        if not self._workload_service.is_running():
             event.fail("Service is not ready. Please re-run the action when the charm is active")
             return
 
@@ -598,7 +622,7 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
         self._holistic_handler(event)
 
     def _on_run_migration_status_action(self, event: ActionEvent) -> None:
-        if not self._workload_service.is_running:
+        if not self._workload_service.is_running():
             event.fail("Service is not ready. Please re-run the action when the charm is active")
             return
 

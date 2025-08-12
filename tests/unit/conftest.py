@@ -87,6 +87,11 @@ def mocked_charm_holistic_handler(mocker: MockerFixture) -> MagicMock:
 
 
 @pytest.fixture
+def mocked_is_running(mocker: MockerFixture) -> MagicMock:
+    return mocker.patch("charm.WorkloadService.is_running", return_value=True)
+
+
+@pytest.fixture
 def mocked_ingress_data(mocker: MockerFixture) -> IngressData:
     mocked = mocker.patch(
         "charm.IngressData.load",
@@ -159,3 +164,4 @@ def all_satisfied_conditions(mocker: MockerFixture) -> None:
     mocker.patch("charm.smtp_integration_exists", return_value=True)
     mocker.patch("charm.openfga_store_readiness", return_value=True)
     mocker.patch("charm.openfga_model_readiness", return_value=True)
+    mocker.patch("charm.WorkloadService.is_running", return_value=True)

@@ -65,7 +65,7 @@ class TestRunMigrationUpAction:
         peer_integration: int,
     ) -> None:
         harness.set_leader(False)
-        mocked_workload_service.is_running = True
+        mocked_workload_service.is_running.return_value = True
 
         try:
             harness.run_action("run-migration-up")
@@ -82,7 +82,7 @@ class TestRunMigrationUpAction:
         peer_integration: int,
     ) -> None:
         harness.set_leader(True)
-        mocked_workload_service.is_running = False
+        mocked_workload_service.is_running.return_value = False
 
         try:
             harness.run_action("run-migration-up")
@@ -101,7 +101,7 @@ class TestRunMigrationUpAction:
         mocked_cli: MagicMock,
     ) -> None:
         harness.set_leader(True)
-        mocked_workload_service.is_running = True
+        mocked_workload_service.is_running.return_value = True
 
         try:
             harness.run_action("run-migration-up")
@@ -118,7 +118,7 @@ class TestRunMigrationUpAction:
         peer_integration: int,
     ) -> None:
         harness.set_leader(True)
-        mocked_workload_service.is_running = True
+        mocked_workload_service.is_running.return_value = True
 
         with patch("charm.CommandLine.migrate_up", side_effect=MigrationError):
             try:
@@ -138,7 +138,7 @@ class TestRunMigrationUpAction:
     ) -> None:
         harness.set_leader(True)
         mocked_workload_service.version = "1.0.0"
-        mocked_workload_service.is_running = True
+        mocked_workload_service.is_running.return_value = True
 
         harness.run_action("run-migration-up")
 
@@ -167,7 +167,7 @@ class TestRunMigrationDownAction:
         peer_integration: int,
     ) -> None:
         harness.set_leader(False)
-        mocked_workload_service.is_running = True
+        mocked_workload_service.is_running.return_value = True
 
         try:
             harness.run_action("run-migration-down")
@@ -184,7 +184,7 @@ class TestRunMigrationDownAction:
         peer_integration: int,
     ) -> None:
         harness.set_leader(True)
-        mocked_workload_service.is_running = False
+        mocked_workload_service.is_running.return_value = False
 
         try:
             harness.run_action("run-migration-down")
@@ -203,7 +203,7 @@ class TestRunMigrationDownAction:
         mocked_cli: MagicMock,
     ) -> None:
         harness.set_leader(True)
-        mocked_workload_service.is_running = True
+        mocked_workload_service.is_running.return_value = True
 
         try:
             harness.run_action("run-migration-down")
@@ -220,7 +220,7 @@ class TestRunMigrationDownAction:
         peer_integration: int,
     ) -> None:
         harness.set_leader(True)
-        mocked_workload_service.is_running = True
+        mocked_workload_service.is_running.return_value = True
 
         with patch("charm.CommandLine.migrate_down", side_effect=MigrationError):
             try:
@@ -240,7 +240,7 @@ class TestRunMigrationDownAction:
     ) -> None:
         harness.set_leader(True)
         mocked_workload_service.version = "1.0.0"
-        mocked_workload_service.is_running = True
+        mocked_workload_service.is_running.return_value = True
 
         harness.run_action("run-migration-down")
 
@@ -259,7 +259,7 @@ class TestRunMigrationStatusAction:
         mocked_workload_service: MagicMock,
         mocked_cli: MagicMock,
     ) -> None:
-        mocked_workload_service.is_running = False
+        mocked_workload_service.is_running.return_value = False
 
         try:
             harness.run_action("run-migration-status")
@@ -276,7 +276,7 @@ class TestRunMigrationStatusAction:
         harness: Harness,
         mocked_workload_service: MagicMock,
     ) -> None:
-        mocked_workload_service.is_running = True
+        mocked_workload_service.is_running.return_value = True
 
         with patch("charm.CommandLine.migrate_status", return_value=None):
             try:
@@ -290,7 +290,7 @@ class TestRunMigrationStatusAction:
         mocked_workload_service: MagicMock,
         mocked_cli: MagicMock,
     ) -> None:
-        mocked_workload_service.is_running = True
+        mocked_workload_service.is_running.return_value = True
         mocked_cli.return_value = "status"
 
         output = harness.run_action("run-migration-status")

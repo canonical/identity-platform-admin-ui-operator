@@ -680,6 +680,12 @@ class TestCollectStatusEvent:
                 WaitingStatus,
                 "OpenFGA model is not ready yet. If this persists, check `juju logs` for errors",
             ),
+            (
+                "WorkloadService.is_running",
+                False,
+                BlockedStatus,
+                f"Failed to start the service, please check the {WORKLOAD_CONTAINER} container logs",
+            ),
         ],
     )
     def test_when_a_condition_failed(

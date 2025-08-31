@@ -1,4 +1,4 @@
 cosl
 lightkube
-ops ==3.1.0
+ops ==3.2.0
 pydantic >= 2

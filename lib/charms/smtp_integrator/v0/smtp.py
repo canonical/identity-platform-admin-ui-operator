@@ -1,4 +1,4 @@
-# Copyright 2024 Canonical Ltd.
+# Copyright 2025 Canonical Ltd.
 # Licensed under the Apache2.0. See LICENSE file in charm source for details.
 
 """Library to manage the integration with the SMTP Integrator charm.
@@ -68,7 +68,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 12
+LIBPATCH = 17
 
 PYDEPS = ["pydantic>=2"]
 
@@ -87,6 +87,14 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_RELATION_NAME = "smtp"
 LEGACY_RELATION_NAME = "smtp-legacy"
+
+
+class SmtpError(Exception):
+    """Common ancestor for Smtp related exceptions."""
+
+
+class SecretError(SmtpError):
+    """Common ancestor for Secrets related exceptions."""
 
 
 class TransportSecurity(str, Enum):
@@ -133,7 +141,7 @@ class SmtpRelationData(BaseModel):
     """
 
     host: str = Field(..., min_length=1)
-    port: int = Field(None, ge=1, le=65536)
+    port: int = Field(..., ge=1, le=65536)
     user: Optional[str] = None
     password: Optional[str] = None
     password_id: Optional[str] = None
@@ -270,6 +278,7 @@ class SmtpRequires(ops.Object):
         self.charm = charm
         self.relation_name = relation_name
         self.framework.observe(charm.on[relation_name].relation_changed, self._on_relation_changed)
+        self.framework.observe(charm.on.secret_changed, self._on_secret_changed)
 
     def get_relation_data(self) -> Optional[SmtpRelationData]:
         """Retrieve the relation data.
@@ -278,9 +287,11 @@ class SmtpRequires(ops.Object):
             SmtpRelationData: the relation data.
         """
         relation = self.model.get_relation(self.relation_name)
-        return self._get_relation_data_from_relation(relation) if relation else None
+        return self.get_relation_data_from_relation(relation) if relation else None
 
-    def _get_relation_data_from_relation(self, relation: ops.Relation) -> SmtpRelationData | None:
+    def get_relation_data_from_relation(
+        self, relation: ops.Relation
+    ) -> Optional[SmtpRelationData]:
         """Retrieve the relation data.
 
         Args:
@@ -288,16 +299,33 @@ class SmtpRequires(ops.Object):
 
         Returns:
             SmtpRelationData: the relation data.
+
+        Raises:
+            SecretError: if the secret can't be read.
         """
         assert relation.app
         relation_data = relation.data[relation.app]
         if not relation_data:
             return None
+
+        password = relation_data.get("password")
+        if password is None and relation_data.get("password_id"):
+            try:
+                password = (
+                    self.model.get_secret(id=relation_data.get("password_id"))
+                    .get_content()
+                    .get("password")
+                )
+            except ops.model.ModelError as exc:
+                raise SecretError(
+                    f"Could not consume secret {relation_data.get('password_id')}"
+                ) from exc
+
         return SmtpRelationData(
             host=typing.cast(str, relation_data.get("host")),
             port=typing.cast(int, relation_data.get("port")),
             user=relation_data.get("user"),
-            password=relation_data.get("password"),
+            password=password,
             password_id=relation_data.get("password_id"),
             auth_type=AuthType(relation_data.get("auth_type")),
             transport_security=TransportSecurity(relation_data.get("transport_security")),
@@ -315,7 +343,7 @@ class SmtpRequires(ops.Object):
             true: if the relation data is valid.
         """
         try:
-            _ = self._get_relation_data_from_relation(relation)
+            _ = self.get_relation_data_from_relation(relation)
             return True
         except ValidationError as ex:
             error_fields = set(
@@ -326,7 +354,7 @@ class SmtpRequires(ops.Object):
             return False
 
     def _on_relation_changed(self, event: ops.RelationChangedEvent) -> None:
-        """Event emitted when the relation has changed.
+        """Handle the relation changed event.
 
         Args:
             event: event triggering this handler.
@@ -340,6 +368,10 @@ class SmtpRequires(ops.Object):
                 logger.warning('Insecure setting: transport_security has value "none"')
             if self._is_relation_data_valid(event.relation):
                 self.on.smtp_data_available.emit(event.relation, app=event.app, unit=event.unit)
+
+    def _on_secret_changed(self, _: ops.SecretChangedEvent) -> None:
+        """Handle the relation secret event."""
+        self.on.smtp_data_available.emit()
 
 
 class SmtpProvides(ops.Object):

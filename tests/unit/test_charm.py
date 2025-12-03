@@ -22,7 +22,7 @@ from constants import (
     SMTP_INTEGRATION_NAME,
     WORKLOAD_CONTAINER,
 )
-from exceptions import PebbleError
+from exceptions import PebbleServiceError
 from integrations import IngressData, TLSCertificates
 
 
@@ -575,10 +575,10 @@ class TestHolisticHandler:
                 "charm.IdentityPlatformAdminUIOperatorCharm._pebble_layer",
                 new_callable=PropertyMock,
             ),
-            patch("charm.PebbleService.plan", side_effect=PebbleError),
+            patch("charm.PebbleService.plan", side_effect=PebbleServiceError),
             patch("charm.NOOP_CONDITIONS", new=[Mock(return_value=True)]),
             patch("charm.EVENT_DEFER_CONDITIONS", new=[Mock(return_value=True)]),
-            pytest.raises(PebbleError),
+            pytest.raises(PebbleServiceError),
         ):
             harness.charm._holistic_handler(mocked_event)
 

@@ -82,7 +82,7 @@ from constants import (
     TEMPO_TRACING_INTEGRATION_NAME,
     WORKLOAD_CONTAINER,
 )
-from exceptions import MigrationError, PebbleError
+from exceptions import MigrationError, PebbleServiceError
 from integrations import (
     DatabaseConfig,
     HydraData,
@@ -389,6 +389,10 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
 
     def _on_database_integration_broken(self, event: RelationBrokenEvent) -> None:
         self._holistic_handler(event)
+        try:
+            self._pebble_service.stop()
+        except PebbleServiceError as e:
+            logger.error(f"Failed to stop the service, please check the container logs: {e}")
 
     def _on_admin_ui_pebble_check_failed(self, event: ops.PebbleCheckFailedEvent) -> None:
         if event.info.name == PEBBLE_READY_CHECK_NAME:
@@ -497,7 +501,7 @@ class IdentityPlatformAdminUIOperatorCharm(CharmBase):
 
         try:
             self._pebble_service.plan(self._pebble_layer)
-        except PebbleError:
+        except PebbleServiceError:
             logger.error(
                 f"Failed to plan pebble layer, please check the {WORKLOAD_CONTAINER} container logs"
             )

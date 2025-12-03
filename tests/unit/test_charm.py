@@ -438,12 +438,14 @@ class TestDatabaseIntegrationBrokenEvent:
         harness: Harness,
         database_integration: int,
         mocked_charm_holistic_handler: MagicMock,
+        mocked_pebble_service: MagicMock,
     ) -> None:
         harness.charm.on[DATABASE_INTEGRATION_NAME].relation_broken.emit(
             harness.model.get_relation(DATABASE_INTEGRATION_NAME),
         )
 
         mocked_charm_holistic_handler.assert_called_once()
+        mocked_pebble_service.stop.assert_called_once()
 
 
 class TestHolisticHandler:
@@ -681,8 +683,8 @@ class TestCollectStatusEvent:
                 "OpenFGA model is not ready yet. If this persists, check `juju logs` for errors",
             ),
             (
-                "WorkloadService.is_running",
-                False,
+                "WorkloadService.is_failing",
+                True,
                 BlockedStatus,
                 f"Failed to start the service, please check the {WORKLOAD_CONTAINER} container logs",
             ),

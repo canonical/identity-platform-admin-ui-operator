@@ -91,6 +91,16 @@ class WorkloadService:
         c = self._container.get_checks().get("ready")
         return c.status == CheckStatus.UP
 
+    def is_failing(self) -> bool:
+        """Checks whether the service has crashed."""
+        if not self.get_service():
+            return False
+
+        if not (c := self._container.get_checks().get(PEBBLE_READY_CHECK_NAME)):
+            return False
+
+        return c.failures > 0
+
     def open_port(self) -> None:
         self._unit.open_port(protocol="tcp", port=ADMIN_SERVICE_PORT)
 

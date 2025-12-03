@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, PropertyMock, create_autospec
 
 import pytest
 from ops import CollectStatusEvent, EventBase
-from ops.model import Container, Unit
+from ops.model import ActiveStatus, Container, Unit
 from ops.testing import Harness
 from pytest_mock import MockerFixture
 
@@ -36,16 +36,18 @@ def harness() -> Generator[Harness, None, None]:
 
 @pytest.fixture(autouse=True)
 def mocked_k8s_resource_patch(mocker: MockerFixture) -> None:
-    mocker.patch(
+    mock_patcher_cls = mocker.patch(
         "charms.observability_libs.v0.kubernetes_compute_resources_patch.ResourcePatcher",
         autospec=True,
     )
-    mocker.patch.multiple(
-        "charm.KubernetesComputeResourcesPatch",
-        _namespace="testing",
-        _patch=lambda *a, **kw: True,
-        is_ready=lambda *a, **kw: True,
-    )
+    mock_patcher_instance = mock_patcher_cls.return_value
+    mock_patcher_instance.is_failed.return_value = (False, "")
+    mock_patcher_instance.is_ready.return_value = True
+
+    mocker.patch("charm.KubernetesComputeResourcesPatch.is_ready", return_value=True)
+    mocker.patch("charm.KubernetesComputeResourcesPatch.get_status", return_value=ActiveStatus())
+    mocker.patch("charm.KubernetesComputeResourcesPatch._patch", return_value=True)
+    mocker.patch("charm.KubernetesComputeResourcesPatch._namespace", return_value="model")
 
 
 @pytest.fixture
@@ -164,4 +166,4 @@ def all_satisfied_conditions(mocker: MockerFixture) -> None:
     mocker.patch("charm.smtp_integration_exists", return_value=True)
     mocker.patch("charm.openfga_store_readiness", return_value=True)
     mocker.patch("charm.openfga_model_readiness", return_value=True)
-    mocker.patch("charm.WorkloadService.is_running", return_value=True)
+    mocker.patch("charm.WorkloadService.is_failing", return_value=False)

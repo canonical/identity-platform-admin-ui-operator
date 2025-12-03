@@ -5,6 +5,7 @@
 import json
 import logging
 import os
+from pathlib import Path
 from typing import Callable, Optional
 
 import pytest
@@ -65,9 +66,10 @@ async def test_build_and_deploy(
     )
 
     # Deploy dependencies
+    bundle_path = Path(__file__).parent / "identity_bundle.yaml"
     await deploy_identity_bundle(
         ops_test=ops_test,
-        bundle_channel="latest/edge",
+        bundle_url=str(bundle_path),
         ext_idp_service=ext_idp_service,
     )
 

@@ -6,7 +6,7 @@ class CharmError(Exception):
     """Base class for custom charm errors."""
 
 
-class PebbleError(CharmError):
+class PebbleServiceError(CharmError):
     """Error for pebble related operations."""
 
 

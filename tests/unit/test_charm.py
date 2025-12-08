@@ -22,7 +22,7 @@ from constants import (
     SMTP_INTEGRATION_NAME,
     WORKLOAD_CONTAINER,
 )
-from exceptions import PebbleError
+from exceptions import PebbleServiceError
 from integrations import IngressData, TLSCertificates
 
 
@@ -438,12 +438,14 @@ class TestDatabaseIntegrationBrokenEvent:
         harness: Harness,
         database_integration: int,
         mocked_charm_holistic_handler: MagicMock,
+        mocked_pebble_service: MagicMock,
     ) -> None:
         harness.charm.on[DATABASE_INTEGRATION_NAME].relation_broken.emit(
             harness.model.get_relation(DATABASE_INTEGRATION_NAME),
         )
 
         mocked_charm_holistic_handler.assert_called_once()
+        mocked_pebble_service.stop.assert_called_once()
 
 
 class TestHolisticHandler:
@@ -575,10 +577,10 @@ class TestHolisticHandler:
                 "charm.IdentityPlatformAdminUIOperatorCharm._pebble_layer",
                 new_callable=PropertyMock,
             ),
-            patch("charm.PebbleService.plan", side_effect=PebbleError),
+            patch("charm.PebbleService.plan", side_effect=PebbleServiceError),
             patch("charm.NOOP_CONDITIONS", new=[Mock(return_value=True)]),
             patch("charm.EVENT_DEFER_CONDITIONS", new=[Mock(return_value=True)]),
-            pytest.raises(PebbleError),
+            pytest.raises(PebbleServiceError),
         ):
             harness.charm._holistic_handler(mocked_event)
 
@@ -681,8 +683,8 @@ class TestCollectStatusEvent:
                 "OpenFGA model is not ready yet. If this persists, check `juju logs` for errors",
             ),
             (
-                "WorkloadService.is_running",
-                False,
+                "WorkloadService.is_failing",
+                True,
                 BlockedStatus,
                 f"Failed to start the service, please check the {WORKLOAD_CONTAINER} container logs",
             ),

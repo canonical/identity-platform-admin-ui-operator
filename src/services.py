@@ -19,7 +19,7 @@ from constants import (
     WORKLOAD_SERVICE,
 )
 from env_vars import DEFAULT_CONTAINER_ENV, EnvVarConvertible
-from exceptions import PebbleError
+from exceptions import PebbleServiceError
 from integrations import OpenFGAIntegrationData
 
 logger = logging.getLogger(__name__)
@@ -91,6 +91,16 @@ class WorkloadService:
         c = self._container.get_checks().get("ready")
         return c.status == CheckStatus.UP
 
+    def is_failing(self) -> bool:
+        """Checks whether the service has crashed."""
+        if not self.get_service():
+            return False
+
+        if not (c := self._container.get_checks().get(PEBBLE_READY_CHECK_NAME)):
+            return False
+
+        return c.failures > 0
+
     def open_port(self) -> None:
         self._unit.open_port(protocol="tcp", port=ADMIN_SERVICE_PORT)
 
@@ -127,7 +137,13 @@ class PebbleService:
         try:
             self._container.replan()
         except Exception as e:
-            raise PebbleError(f"Pebble plan failed. Error: {e}")
+            raise PebbleServiceError(f"Pebble plan failed. Error: {e}")
+
+    def stop(self) -> None:
+        try:
+            self._container.stop(WORKLOAD_SERVICE)
+        except Exception as e:
+            raise PebbleServiceError(f"Pebble failed to stop the workload service. Error: {e}")
 
     def render_pebble_layer(self, *env_var_sources: EnvVarConvertible) -> Layer:
         updated_env_vars = ChainMap(*(source.to_env_vars() for source in env_var_sources))  # type: ignore

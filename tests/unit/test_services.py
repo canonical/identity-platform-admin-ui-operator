@@ -10,7 +10,7 @@ import pytest
 
 from constants import ADMIN_SERVICE_PORT, CA_CERT_DIR_PATH, WORKLOAD_CONTAINER
 from env_vars import EnvVarConvertible
-from exceptions import PebbleError
+from exceptions import PebbleServiceError
 from services import DEFAULT_CONTAINER_ENV, WORKLOAD_SERVICE, PebbleService, WorkloadService
 
 
@@ -107,7 +107,7 @@ class TestPebbleService:
     ) -> None:
         mocked_container.replan.side_effect = Exception
 
-        with pytest.raises(PebbleError):
+        with pytest.raises(PebbleServiceError):
             pebble_service.plan(mocked_layer)
 
         mocked_container.add_layer.assert_called_once_with(

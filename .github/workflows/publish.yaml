@@ -73,9 +73,9 @@ jobs:
       - publish
       - revision
     if: ${{ (needs.publish.outputs.channel == 'latest/edge') }}
-    uses: canonical/identity-team/.github/workflows/charm-deploy.yaml@f18247249f506f3c9210b86e43a2c4dd063088c5 # v1.8.7
+    uses: canonical/identity-team/.github/workflows/charm-deploy.yaml@6b27807be4ec7c25045d52ef09ac780d684f65a2 # v1.10.0
     with:
-        model: dev-iam
+        model: blue-iam
         revision: ${{ needs.revision.outputs.revision }}
         channel: ${{ needs.publish.outputs.channel}}
         application: admin-ui
@@ -84,6 +84,7 @@ jobs:
       CLIENT_ID: ${{ secrets.JIMM_DEV_CLIENT_ID }}
       CLIENT_SECRET: ${{ secrets.JIMM_DEV_CLIENT_SECRET }}
       JIMM_URL: ${{ secrets.JIMM_URL }}
+      MODEL_UUID: ${{ secrets.DEV_MODEL_UUID }}
   
   stg-deploy:
     concurrency:
@@ -93,9 +94,9 @@ jobs:
       - publish
       - revision
     if: ${{ (needs.publish.outputs.channel == 'latest/stable') }}
-    uses: canonical/identity-team/.github/workflows/charm-deploy.yaml@f18247249f506f3c9210b86e43a2c4dd063088c5 # v1.8.7
+    uses: canonical/identity-team/.github/workflows/charm-deploy.yaml@6b27807be4ec7c25045d52ef09ac780d684f65a2 # v1.10.0
     with:
-      model: stg-iam
+      model: green-iam
       revision: ${{ needs.revision.outputs.revision }}
       channel: ${{ needs.publish.outputs.channel}}
       application: admin-ui
@@ -104,4 +105,5 @@ jobs:
         CLIENT_ID: ${{ secrets.JIMM_STG_CLIENT_ID }}
         CLIENT_SECRET: ${{ secrets.JIMM_STG_CLIENT_SECRET }}
         JIMM_URL: ${{ secrets.JIMM_URL }}
+        MODEL_UUID: ${{ secrets.STG_MODEL_UUID }}
       

@@ -57,7 +57,18 @@ import socket
 import typing
 from dataclasses import dataclass
 from functools import partial
-from typing import Any, Callable, Dict, List, MutableMapping, Optional, Sequence, Tuple, Union
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    MutableMapping,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+    cast,
+)
 
 import pydantic
 from ops.charm import CharmBase, RelationBrokenEvent, RelationEvent
@@ -73,7 +84,7 @@ LIBAPI = 2
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 14
+LIBPATCH = 17
 
 PYDEPS = ["pydantic"]
 
@@ -226,7 +237,7 @@ class IngressUrl(BaseModel):
 class IngressProviderAppData(DatabagModel):
     """Ingress application databag schema."""
 
-    ingress: IngressUrl
+    ingress: Optional[IngressUrl] = None
 
 
 class ProviderSchema(BaseModel):
@@ -235,12 +246,32 @@ class ProviderSchema(BaseModel):
     app: IngressProviderAppData
 
 
+class IngressHealthCheck(BaseModel):
+    """HealthCheck schema for Ingress."""
+
+    path: str = Field(description="The health check endpoint path (required).")
+    scheme: Optional[str] = Field(
+        default=None, description="Replaces the server URL scheme for the health check endpoint."
+    )
+    hostname: Optional[str] = Field(
+        default=None, description="Hostname to be set in the health check request."
+    )
+    port: Optional[int] = Field(
+        default=None, description="Replaces the server URL port for the health check endpoint."
+    )
+    interval: str = Field(default="30s", description="Frequency of the health check calls.")
+    timeout: str = Field(default="5s", description="Maximum duration for a health check request.")
+
+
 class IngressRequirerAppData(DatabagModel):
     """Ingress requirer application databag model."""
 
     model: str = Field(description="The model the application is in.")
     name: str = Field(description="the name of the app requesting ingress.")
     port: int = Field(description="The port the app wishes to be exposed.")
+    healthcheck_params: Optional[IngressHealthCheck] = Field(
+        default=None, description="Optional health check configuration for ingress."
+    )
 
     # fields on top of vanilla 'ingress' interface:
     strip_prefix: Optional[bool] = Field(
@@ -425,11 +456,16 @@ class IngressPerAppDataRemovedEvent(RelationEvent):
     """Event representing that ingress data has been removed for an app."""
 
 
+class IngressPerAppEndpointsUpdatedEvent(RelationEvent):
+    """Event representing that the proxied endpoints have been updated."""
+
+
 class IngressPerAppProviderEvents(ObjectEvents):
     """Container for IPA Provider events."""
 
     data_provided = EventSource(IngressPerAppDataProvidedEvent)
     data_removed = EventSource(IngressPerAppDataRemovedEvent)
+    endpoints_updated = EventSource(IngressPerAppEndpointsUpdatedEvent)
 
 
 @dataclass
@@ -477,7 +513,7 @@ class IngressPerAppProvider(_IngressPerAppBase):
             )
 
     def _handle_relation_broken(self, event):
-        self.on.data_removed.emit(event.relation)  # type: ignore
+        self.on.data_removed.emit(event.relation, event.relation.app)  # type: ignore
 
     def wipe_ingress_data(self, relation: Relation):
         """Clear ingress data from relation."""
@@ -492,9 +528,10 @@ class IngressPerAppProvider(_IngressPerAppBase):
             )
             return
         del relation.data[self.app]["ingress"]
+        self.on.endpoints_updated.emit(relation=relation, app=relation.app)
 
     def _get_requirer_units_data(self, relation: Relation) -> List["IngressRequirerUnitData"]:
-        """Fetch and validate the requirer's app databag."""
+        """Fetch and validate the requirer's unit databag."""
         out: List["IngressRequirerUnitData"] = []
 
         unit: Unit
@@ -525,7 +562,9 @@ class IngressPerAppProvider(_IngressPerAppBase):
                 self._get_requirer_app_data(relation), self._get_requirer_units_data(relation)
             )
         except (pydantic.ValidationError, DataValidationError) as e:
-            raise DataValidationError("failed to validate ingress requirer data") from e
+            raise DataValidationError(
+                "failed to validate ingress requirer data: %s" % str(e)
+            ) from e
 
     def is_ready(self, relation: Optional[Relation] = None):
         """The Provider is ready if the requirer has sent valid data."""
@@ -535,7 +574,7 @@ class IngressPerAppProvider(_IngressPerAppBase):
         try:
             self.get_data(relation)
         except (DataValidationError, NotReadyError) as e:
-            log.debug("Provider not ready; validation error encountered: %s" % str(e))
+            log.info("Provider not ready; validation error encountered: %s" % str(e))
             return False
         return True
 
@@ -558,7 +597,17 @@ class IngressPerAppProvider(_IngressPerAppBase):
     def publish_url(self, relation: Relation, url: str):
         """Publish to the app databag the ingress url."""
         ingress_url = {"url": url}
-        IngressProviderAppData(ingress=ingress_url).dump(relation.data[self.app])  # type: ignore
+        try:
+            IngressProviderAppData(ingress=ingress_url).dump(relation.data[self.app])  # type: ignore
+            self.on.endpoints_updated.emit(relation=relation, app=relation.app)
+        except pydantic.ValidationError as e:
+            # If we cannot validate the url as valid, publish an empty databag and log the error.
+            log.error(f"Failed to validate ingress url '{url}' - got ValidationError {e}")
+            log.error(
+                "url was not published to ingress relation for {relation.app}.  This error is likely due to an"
+                " error or misconfiguration of the charm calling this library."
+            )
+            IngressProviderAppData(ingress=None).dump(relation.data[self.app])  # type: ignore
 
     @property
     def proxied_endpoints(self) -> Dict[str, Dict[str, str]]:
@@ -596,10 +645,14 @@ class IngressPerAppProvider(_IngressPerAppBase):
             if not ingress_data:
                 log.warning(f"relation {ingress_relation} not ready yet: try again in some time.")
                 continue
+
+            # Validation above means ingress cannot be None, but type checker doesn't know that.
+            ingress = ingress_data.ingress
+            ingress = cast(IngressProviderAppData, ingress)
             if PYDANTIC_IS_V1:
-                results[ingress_relation.app.name] = ingress_data.ingress.dict()
+                results[ingress_relation.app.name] = ingress.dict()
             else:
-                results[ingress_relation.app.name] = ingress_data.ingress.model_dump(mode="json")
+                results[ingress_relation.app.name] = ingress.model_dump(mode="json")
         return results
 
 
@@ -644,6 +697,7 @@ class IngressPerAppRequirer(_IngressPerAppBase):
         # fixme: this is horrible UX.
         #  shall we switch to manually calling provide_ingress_requirements with all args when ready?
         scheme: Union[Callable[[], str], str] = lambda: "http",
+        healthcheck_params: Optional[Dict[str, Any]] = None,
     ):
         """Constructor for IngressRequirer.
 
@@ -653,23 +707,34 @@ class IngressPerAppRequirer(_IngressPerAppBase):
         All request args must be given as keyword args.
 
         Args:
-            charm: the charm that is instantiating the library.
-            relation_name: the name of the relation endpoint to bind to (defaults to `ingress`);
-                relation must be of interface type `ingress` and have "limit: 1")
+            charm: The charm that is instantiating the library.
+            relation_name: The name of the relation endpoint to bind to (defaults to "ingress");
+                the relation must be of interface type "ingress" and have a limit of 1.
             host: Hostname to be used by the ingress provider to address the requiring
                 application; if unspecified, the default Kubernetes service name will be used.
             ip: Alternative addressing method other than host to be used by the ingress provider;
-                if unspecified, binding address from juju network API will be used.
-            strip_prefix: configure Traefik to strip the path prefix.
-            redirect_https: redirect incoming requests to HTTPS.
-            scheme: callable returning the scheme to use when constructing the ingress url.
-                Or a string, if the scheme is known and stable at charm-init-time.
+                if unspecified, the binding address from the Juju network API will be used.
+            healthcheck_params: Optional dictionary containing health check
+                configuration parameters conforming to the IngressHealthCheck schema. The dictionary must include:
+                    - "path" (str): The health check endpoint path (required).
+                It may also include:
+                    - "scheme" (Optional[str]): Replaces the server URL scheme for the health check endpoint.
+                    - "hostname" (Optional[str]): Hostname to be set in the health check request.
+                    - "port" (Optional[int]): Replaces the server URL port for the health check endpoint.
+                    - "interval" (str): Frequency of the health check calls (defaults to "30s" if omitted).
+                    - "timeout" (str): Maximum duration for a health check request (defaults to "5s" if omitted).
+                If provided, "path" is required while "interval" and "timeout" will use Traefik's defaults when not specified.
+            strip_prefix: Configure Traefik to strip the path prefix.
+            redirect_https: Redirect incoming requests to HTTPS.
+            scheme: Either a callable that returns the scheme to use when constructing the ingress URL,
+                or a string if the scheme is known and stable at charm initialization.
 
         Request Args:
             port: the port of the service
         """
         super().__init__(charm, relation_name)
         self.charm: CharmBase = charm
+        self.healthcheck_params = healthcheck_params
         self.relation_name = relation_name
         self._strip_prefix = strip_prefix
         self._redirect_https = redirect_https
@@ -700,7 +765,7 @@ class IngressPerAppRequirer(_IngressPerAppBase):
 
     def _handle_relation_broken(self, event):
         self._stored.current_url = None  # type: ignore
-        self.on.revoked.emit(event.relation)  # type: ignore
+        self.on.revoked.emit(relation=event.relation, app=event.relation.app)  # type: ignore
 
     def _handle_upgrade_or_leader(self, event):
         """On upgrade/leadership change: ensure we publish the data we have."""
@@ -801,6 +866,11 @@ class IngressPerAppRequirer(_IngressPerAppBase):
                 port=port,
                 strip_prefix=self._strip_prefix,  # type: ignore  # pyright does not like aliases
                 redirect_https=self._redirect_https,  # type: ignore  # pyright does not like aliases
+                healthcheck_params=(
+                    IngressHealthCheck(**self.healthcheck_params)
+                    if self.healthcheck_params
+                    else None
+                ),
             ).dump(app_databag)
         except pydantic.ValidationError as e:
             msg = "failed to validate app data"
@@ -813,7 +883,7 @@ class IngressPerAppRequirer(_IngressPerAppBase):
         return self.relations[0] if self.relations else None
 
     def _get_url_from_relation_data(self) -> Optional[str]:
-        """The full ingress URL to reach the current unit.
+        """The full ingress URL to reach the charm application.
 
         Returns None if the URL isn't available yet.
         """
@@ -834,11 +904,15 @@ class IngressPerAppRequirer(_IngressPerAppBase):
         if not databag:  # not ready yet
             return None
 
-        return str(IngressProviderAppData.load(databag).ingress.url)
+        ingress = IngressProviderAppData.load(databag).ingress
+        if ingress is None:
+            return None
+
+        return str(ingress.url)
 
     @property
     def url(self) -> Optional[str]:
-        """The full ingress URL to reach the current unit.
+        """The full ingress URL to reach the charm application.
 
         Returns None if the URL isn't available yet.
         """

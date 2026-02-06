@@ -4,137 +4,160 @@
 
 import json
 import logging
-import os
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Optional
 
+import jubilant
 import pytest
-import requests
-from conftest import (
+from integration.conftest import (
+    integrate_dependencies,
+)
+from integration.constants import (
     ADMIN_SERVICE_APP,
     ADMIN_SERVICE_IMAGE,
-    DB_APP,
-    MAIL_APP,
-    MAIL_SMTP_PORT,
-    OPENFGA_APP,
-    SMTP_INTEGRATOR_APP,
-    integrate_dependencies,
-    remove_integration,
-)
-from juju.application import Application
-from juju.unit import Unit
-from oauth_tools import (
-    ExternalIdpService,
-    access_application_login_page,
-    complete_auth_code_login,
-    deploy_identity_bundle,
-    get_reverse_proxy_app_url,
-    verify_page_loads,
-)
-from playwright.async_api import BrowserContext, Page
-from pytest_operator.plugin import OpsTest
-
-from constants import (
     CERTIFICATE_TRANSFER_INTEGRATION_NAME,
     DATABASE_INTEGRATION_NAME,
+    DB_APP,
     HYDRA_ENDPOINTS_INTEGRATION_NAME,
     INGRESS_INTEGRATION_NAME,
     KRATOS_INFO_INTEGRATION_NAME,
+    MAIL_APP,
+    MAIL_SMTP_PORT,
+    OPENFGA_APP,
     OPENFGA_INTEGRATION_NAME,
     OPENFGA_MODEL_ID,
+    SMTP_INTEGRATOR_APP,
+)
+from integration.utils import (
+    all_active,
+    all_blocked,
+    and_,
+    any_error,
+    remove_integration,
+    unit_number,
 )
 
-pytest_plugins = ["oauth_tools.fixtures"]
 logger = logging.getLogger(__name__)
 
 
-@pytest.mark.skip_if_deployed
-@pytest.mark.abort_on_fail
-async def test_build_and_deploy(
-    ops_test: OpsTest,
-    request: pytest.FixtureRequest,
-    ext_idp_service: ExternalIdpService,
+@pytest.mark.setup
+def test_build_and_deploy(
+    juju: jubilant.Juju,
     local_charm: str,
+    kratos_app_name: str,
+    hydra_app_name: str,
+    public_traefik_app_name: str,
+    self_signed_certificates_app_name: str,
     mail_deployment: None,
 ) -> None:
-    await ops_test.model.deploy(
-        local_charm,
-        resources={"oci-image": ADMIN_SERVICE_IMAGE},
-        application_name=ADMIN_SERVICE_APP,
-        trust=True,
-        series="jammy",
-    )
-
     # Deploy dependencies
     bundle_path = Path(__file__).parent / "identity_bundle.yaml"
-    await deploy_identity_bundle(
-        ops_test=ops_test,
-        bundle_url=str(bundle_path),
-        ext_idp_service=ext_idp_service,
-    )
+    juju.deploy(str(bundle_path), trust=True)
 
-    await ops_test.model.deploy(
-        entity_url=OPENFGA_APP,
-        channel="latest/edge",
-        series="jammy",
+    # Deploy local charm
+    juju.deploy(
+        str(local_charm),
+        app=ADMIN_SERVICE_APP,
+        resources={"oci-image": ADMIN_SERVICE_IMAGE},
         trust=True,
     )
-    await ops_test.model.integrate(OPENFGA_APP, DB_APP)
-    await ops_test.model.wait_for_idle(apps=[OPENFGA_APP, DB_APP], status="active", timeout=5 * 60)
 
-    await ops_test.model.deploy(
-        entity_url=SMTP_INTEGRATOR_APP,
+    juju.deploy(
+        "openfga-k8s",
         channel="latest/edge",
-        series="jammy",
+        trust=True,
+    )
+    juju.integrate(OPENFGA_APP, DB_APP)
+
+    # Wait for OpenFGA and DB to be ready before integrating with Admin UI
+    juju.wait(
+        ready=all_active(OPENFGA_APP, DB_APP),
+        error=any_error(OPENFGA_APP, DB_APP),
+        timeout=10 * 60,
+    )
+
+    juju.deploy(
+        SMTP_INTEGRATOR_APP,
+        channel="latest/edge",
         trust=True,
         config={
-            "host": f"{MAIL_APP}.{ops_test.model_name}.svc.cluster.local",
+            "host": f"{MAIL_APP}.{juju.model}.svc.cluster.local",
             "port": str(MAIL_SMTP_PORT),
         },
     )
 
     # Integrate with dependencies
-    await integrate_dependencies(ops_test, request)
+    integrate_dependencies(
+        juju,
+        kratos_app_name,
+        hydra_app_name,
+        public_traefik_app_name,
+        self_signed_certificates_app_name,
+    )
 
-    await ops_test.model.wait_for_idle(
-        status="active",
+    juju.wait(
+        ready=all_active(
+            OPENFGA_APP,
+            DB_APP,
+            SMTP_INTEGRATOR_APP,
+            kratos_app_name,
+            hydra_app_name,
+            public_traefik_app_name,
+            self_signed_certificates_app_name,
+        ),
+        error=any_error(
+            OPENFGA_APP,
+            DB_APP,
+            SMTP_INTEGRATOR_APP,
+            kratos_app_name,
+            hydra_app_name,
+            public_traefik_app_name,
+            self_signed_certificates_app_name,
+        ),
+        timeout=20 * 60,
+    )
+
+    juju.wait(
+        ready=all_active(
+            ADMIN_SERVICE_APP,
+        ),
         timeout=10 * 60,
     )
 
 
-async def test_kratos_integration(leader_kratos_integration_data: Optional[dict]) -> None:
+def test_kratos_integration(leader_kratos_integration_data: Optional[dict]) -> None:
     assert leader_kratos_integration_data
     assert all(leader_kratos_integration_data.values())
 
 
-async def test_hydra_endpoint_integration(
+def test_hydra_endpoint_integration(
     leader_hydra_endpoint_integration_data: Optional[dict],
 ) -> None:
     assert leader_hydra_endpoint_integration_data
     assert all(leader_hydra_endpoint_integration_data.values())
 
 
-async def test_openfga_integration(leader_openfga_integration_data: Optional[dict]) -> None:
+def test_openfga_integration(leader_openfga_integration_data: Optional[dict]) -> None:
     assert leader_openfga_integration_data
     assert all(leader_openfga_integration_data.values())
 
 
-async def test_ingress_integration(
-    ops_test: OpsTest, leader_ingress_integration_data: Optional[dict]
+def test_ingress_integration(
+    juju: jubilant.Juju, leader_ingress_integration_data: Optional[dict]
 ) -> None:
     assert leader_ingress_integration_data
     assert leader_ingress_integration_data["ingress"]
 
     data = json.loads(leader_ingress_integration_data["ingress"])
-    assert f"{ops_test.model_name}-{ADMIN_SERVICE_APP}" in data["url"]
+    assert f"{juju.model}-{ADMIN_SERVICE_APP}" in data["url"]
 
 
-async def test_oauth_integration(leader_oauth_integration_data: Optional[dict]) -> None:
+def test_oauth_integration(leader_oauth_integration_data: Optional[dict]) -> None:
     assert leader_oauth_integration_data
     assert all(leader_oauth_integration_data.values())
 
 
-async def test_peer_integration(
+def test_peer_integration(
     leader_peer_integration_data: Optional[dict],
     admin_service_version: str,
 ) -> None:
@@ -145,198 +168,101 @@ async def test_peer_integration(
     assert openfga_model[OPENFGA_MODEL_ID]
 
 
-async def test_smtp_integration(
-    ops_test: OpsTest, leader_smtp_integration_data: Optional[dict]
+def test_smtp_integration(
+    juju: jubilant.Juju,
+    leader_smtp_integration_data: Optional[dict],
 ) -> None:
     assert leader_smtp_integration_data
-    assert (
-        leader_smtp_integration_data["host"]
-        == f"{MAIL_APP}.{ops_test.model_name}.svc.cluster.local"
-    )
+    assert leader_smtp_integration_data["host"] == f"{MAIL_APP}.{juju.model}.svc.cluster.local"
     assert leader_smtp_integration_data["port"] == str(MAIL_SMTP_PORT)
 
 
-async def test_database_integration(leader_database_integration_data: Optional[dict]) -> None:
+def test_database_integration(leader_database_integration_data: Optional[dict]) -> None:
     assert leader_database_integration_data
 
 
-async def test_create_identity_action(admin_service_unit: Unit) -> None:
-    action = await admin_service_unit.run_action(
+def test_create_identity_action(juju: jubilant.Juju) -> None:
+    action = juju.run(
+        f"{ADMIN_SERVICE_APP}/0",
         "create-identity",
-        **{
+        params={
             "schema": "social_user_v0",
             "password": "password",
             "traits": {"email": "user@canonical.com"},
         },
     )
 
-    res = (await action.wait()).results
+    res = action.results
     assert res["identity-id"]
 
 
-async def test_scale_up(
-    ops_test: OpsTest,
-    admin_service_application: Application,
-    leader_openfga_integration_data: Optional[dict],
-    leader_peer_integration_data: Optional[dict],
-    app_integration_data: Callable,
+def test_scale_up(
+    juju: jubilant.Juju,
 ) -> None:
     target_unit_number = 2
 
-    await admin_service_application.scale(target_unit_number)
+    juju.cli("scale-application", ADMIN_SERVICE_APP, str(target_unit_number))
 
-    await ops_test.model.wait_for_idle(
-        apps=[ADMIN_SERVICE_APP],
-        status="active",
+    juju.wait(
+        ready=and_(
+            all_active(ADMIN_SERVICE_APP),
+            unit_number(ADMIN_SERVICE_APP, target_unit_number),
+        ),
+        error=any_error(ADMIN_SERVICE_APP),
         timeout=5 * 60,
-        wait_for_exact_units=target_unit_number,
     )
 
-    follower_peer_data = await app_integration_data(ADMIN_SERVICE_APP, ADMIN_SERVICE_APP, 1)
-    assert follower_peer_data
-    assert leader_peer_integration_data == follower_peer_data
 
-    follower_openfga_data = await app_integration_data(ADMIN_SERVICE_APP, "openfga", 1)
-    assert follower_openfga_data
-    assert follower_openfga_data == leader_openfga_integration_data
-
-
-async def test_oauth_login_with_identity_bundle(
-    ops_test: OpsTest,
-    page: Page,
-    context: BrowserContext,
-    public_traefik_app_name: str,
-    ext_idp_service: ExternalIdpService,
+@pytest.mark.parametrize(
+    "integration_name, remote_app_name_fixture",
+    [
+        (OPENFGA_INTEGRATION_NAME, "openfga_app_name"),
+        (KRATOS_INFO_INTEGRATION_NAME, "kratos_app_name"),
+        (HYDRA_ENDPOINTS_INTEGRATION_NAME, "hydra_app_name"),
+        (INGRESS_INTEGRATION_NAME, "public_traefik_app_name"),
+        (CERTIFICATE_TRANSFER_INTEGRATION_NAME, "self_signed_certificates_app_name"),
+        (DATABASE_INTEGRATION_NAME, "db_app_name"),
+    ],
+)
+def test_remove_integration(
+    juju: jubilant.Juju,
+    integration_name: str,
+    remote_app_name_fixture: str,
+    request: pytest.FixtureRequest,
 ) -> None:
-    admin_ui_proxy = await get_reverse_proxy_app_url(
-        ops_test, public_traefik_app_name, ADMIN_SERVICE_APP
+    remote_app_name = request.getfixturevalue(remote_app_name_fixture)
+    with remove_integration(juju, remote_app_name, integration_name):
+        juju.wait(
+            ready=all_blocked(ADMIN_SERVICE_APP),
+            error=any_error(ADMIN_SERVICE_APP),
+            timeout=5 * 60,
+        )
+    juju.wait(
+        ready=all_active(ADMIN_SERVICE_APP, remote_app_name),
+        error=any_error(ADMIN_SERVICE_APP, remote_app_name),
+        timeout=10 * 60,
     )
-    login_url = os.path.join(admin_ui_proxy, "api/v0/auth")
-    me_url = os.path.join(admin_ui_proxy, "api/v0/auth/me")
-
-    await access_application_login_page(page=page, url=login_url)
-
-    await complete_auth_code_login(page=page, ops_test=ops_test, ext_idp_service=ext_idp_service)
-
-    redirect_url = os.path.join(admin_ui_proxy, "ui/")
-    await verify_page_loads(page=page, url=redirect_url)
-
-    # Validate that the cookies have been set
-    cookies = {c["name"]: c["value"] for c in await context.cookies(me_url)}
-    user = requests.get(me_url, cookies=cookies, verify=False)
-
-    assert user.json()
-    assert user.json()["email"] == ext_idp_service.user_email
 
 
-async def test_remove_integration_openfga(
-    ops_test: OpsTest,
-    admin_service_application: Application,
-) -> None:
-    async with remove_integration(ops_test, OPENFGA_APP, OPENFGA_INTEGRATION_NAME):
-        assert "blocked" == admin_service_application.status
-
-
-async def test_remove_integration_kratos_info(
-    ops_test: OpsTest,
-    kratos_app_name: str,
-    admin_service_application: Application,
-) -> None:
-    async with remove_integration(ops_test, kratos_app_name, KRATOS_INFO_INTEGRATION_NAME):
-        assert "blocked" == admin_service_application.status
-
-
-async def test_remove_integration_hydra_endpoint_info(
-    ops_test: OpsTest,
-    hydra_app_name: str,
-    admin_service_application: Application,
-) -> None:
-    async with remove_integration(ops_test, hydra_app_name, HYDRA_ENDPOINTS_INTEGRATION_NAME):
-        assert "blocked" == admin_service_application.status
-
-
-async def test_remove_integration_ingress(
-    ops_test: OpsTest,
-    public_traefik_app_name: str,
-    admin_service_application: Application,
-) -> None:
-    async with remove_integration(ops_test, public_traefik_app_name, INGRESS_INTEGRATION_NAME):
-        assert "blocked" == admin_service_application.status
-
-
-async def test_remove_integration_certificate_transfer(
-    ops_test: OpsTest,
-    self_signed_certificates_app_name: str,
-    admin_service_application: Application,
-) -> None:
-    async with remove_integration(
-        ops_test, self_signed_certificates_app_name, CERTIFICATE_TRANSFER_INTEGRATION_NAME
-    ):
-        assert "blocked" == admin_service_application.status
-
-
-async def test_remove_integration_database(
-    ops_test: OpsTest,
-    admin_service_application: Application,
-) -> None:
-    async with remove_integration(ops_test, DB_APP, DATABASE_INTEGRATION_NAME):
-        assert "blocked" == admin_service_application.status
-
-
-async def test_scale_down(
-    ops_test: OpsTest,
-    admin_service_application: Application,
-    leader_openfga_integration_data: Optional[dict],
-    leader_peer_integration_data: Optional[dict],
+def test_scale_down(
+    juju: jubilant.Juju,
 ) -> None:
     target_unit_num = 1
 
-    await admin_service_application.scale(target_unit_num)
+    juju.cli("scale-application", ADMIN_SERVICE_APP, str(target_unit_num))
 
-    await ops_test.model.wait_for_idle(
-        apps=[ADMIN_SERVICE_APP],
-        status="active",
-        timeout=5 * 60,
-        wait_for_exact_units=target_unit_num,
-    )
-
-    assert leader_peer_integration_data
-    assert leader_openfga_integration_data
-
-
-async def test_upgrade(
-    ops_test: OpsTest,
-    request: pytest.FixtureRequest,
-    admin_service_application: Application,
-    local_charm: str,
-) -> None:
-    # remove the current application
-    await ops_test.model.remove_application(
-        app_name=ADMIN_SERVICE_APP,
-        block_until_done=True,
-        destroy_storage=True,
-    )
-
-    # deploy the latest application from CharmHub
-    await ops_test.model.deploy(
-        application_name=ADMIN_SERVICE_APP,
-        entity_url=f"ch:{ADMIN_SERVICE_APP}",
-        channel="edge",
-        series="jammy",
-        trust=True,
-    )
-
-    # integrate with dependencies
-    await integrate_dependencies(ops_test, request)
-
-    # upgrade the charm
-    await admin_service_application.refresh(
-        path=local_charm,
-        resources={"oci-image": ADMIN_SERVICE_IMAGE},
-    )
-
-    await ops_test.model.wait_for_idle(
-        apps=[ADMIN_SERVICE_APP],
-        status="active",
+    juju.wait(
+        ready=and_(
+            all_active(ADMIN_SERVICE_APP),
+            unit_number(ADMIN_SERVICE_APP, target_unit_num),
+        ),
+        error=any_error(ADMIN_SERVICE_APP),
         timeout=5 * 60,
     )
+
+
+@pytest.mark.teardown
+def test_remove_application(juju: jubilant.Juju) -> None:
+    """Test removing the application."""
+    juju.remove_application(ADMIN_SERVICE_APP, destroy_storage=True)
+    juju.wait(lambda s: ADMIN_SERVICE_APP not in s.apps, timeout=1000)

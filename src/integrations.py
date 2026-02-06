@@ -5,6 +5,7 @@ import json
 import logging
 import secrets
 import socket
+import subprocess
 from dataclasses import dataclass
 from os.path import join
 from typing import Any, Mapping, Optional, Union
@@ -25,9 +26,11 @@ from ops.model import Model
 
 from constants import (
     ADMIN_SERVICE_PORT,
+    CA_BUNDLE_PATH,
     CERTIFICATE_TRANSFER_INTEGRATION_NAME,
     COOKIES_ENCRYPTION_KEY,
     DEFAULT_ACCESS_TOKEN_VERIFICATION_STRATEGY,
+    INTEGRATION_CA_BUNDLE_PATH,
     OAUTH_CALLBACK_PATH,
     OAUTH_GRANT_TYPES,
     OAUTH_SCOPES,
@@ -372,9 +375,24 @@ class TLSCertificates:
             }
             ca_certs.update(ca)
 
-        ca_bundle = "\n".join(ca_certs)
+        ca_bundle = "\n".join(sorted(ca_certs))
 
-        return cls(ca_bundle=ca_bundle)
+        if ca_bundle:
+            current_ca_cert = (
+                INTEGRATION_CA_BUNDLE_PATH.read_text()
+                if INTEGRATION_CA_BUNDLE_PATH.exists()
+                else ""
+            )
+            if current_ca_cert != ca_bundle:
+                INTEGRATION_CA_BUNDLE_PATH.parent.mkdir(parents=True, exist_ok=True)
+                INTEGRATION_CA_BUNDLE_PATH.write_text(ca_bundle)
+                subprocess.run(["update-ca-certificates", "--fresh"], check=True)
+        else:
+            if INTEGRATION_CA_BUNDLE_PATH.exists():
+                INTEGRATION_CA_BUNDLE_PATH.unlink(missing_ok=True)
+                subprocess.run(["update-ca-certificates", "--fresh"], check=True)
+
+        return cls(ca_bundle=CA_BUNDLE_PATH.read_text())
 
 
 @dataclass(frozen=True, slots=True)

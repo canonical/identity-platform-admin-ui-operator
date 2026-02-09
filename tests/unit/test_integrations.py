@@ -3,14 +3,15 @@
 
 # Learn more about testing at: https://juju.is/docs/sdk/testing
 
+import json
 from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
 from charms.data_platform_libs.v0.data_interfaces import DatabaseRequires
-from ops.testing import Harness
+from ops.model import Application, Model, Relation
 from pytest_mock import MockerFixture
 
-from constants import POSTGRESQL_DSN_TEMPLATE
+from constants import PEER_INTEGRATION_NAME, POSTGRESQL_DSN_TEMPLATE
 from integrations import (
     DatabaseConfig,
     OAuthIntegration,
@@ -23,36 +24,68 @@ from integrations import (
 
 class TestPeerData:
     @pytest.fixture
-    def peer_data(self, harness: Harness) -> PeerData:
-        data = PeerData(harness.model)
-        data["key"] = "val"
-        return data
+    def mock_model(self) -> MagicMock:
+        model = create_autospec(Model)
+        model.app = create_autospec(Application)
+        return model
 
-    def test_without_peer_integration(self, harness: Harness, peer_data: PeerData) -> None:
+    @pytest.fixture
+    def mock_relation(self, mock_model: MagicMock) -> MagicMock:
+        relation = create_autospec(Relation)
+        # Mock relation.data[app] as a dict
+        relation.data = {mock_model.app: {}}
+        mock_model.get_relation.return_value = relation
+        return relation
+
+    @pytest.fixture
+    def peer_data(self, mock_model: MagicMock) -> PeerData:
+        return PeerData(mock_model)
+
+    def test_without_peer_integration(self, mock_model: MagicMock, peer_data: PeerData) -> None:
+        mock_model.get_relation.return_value = None
         assert peer_data["key"] == {}
+        mock_model.get_relation.assert_called_with(PEER_INTEGRATION_NAME)
 
-    def test_with_wrong_key(
-        self, harness: Harness, peer_integration: int, peer_data: PeerData
-    ) -> None:
+    def test_with_wrong_key(self, mock_relation: MagicMock, peer_data: PeerData) -> None:
         assert peer_data["wrong_key"] == {}
 
-    def test_get(self, harness: Harness, peer_integration: int, peer_data: PeerData) -> None:
+    def test_set_without_peer_integration(
+        self, mock_model: MagicMock, peer_data: PeerData
+    ) -> None:
+        mock_model.get_relation.return_value = None
+        peer_data["key"] = "val"
+        mock_model.get_relation.assert_called_with(PEER_INTEGRATION_NAME)
+
+    def test_set_and_get(
+        self, mock_relation: MagicMock, mock_model: MagicMock, peer_data: PeerData
+    ) -> None:
+        peer_data["key"] = "val"
+
+        assert mock_relation.data[mock_model.app]["key"] == json.dumps("val")
+
         assert peer_data["key"] == "val"
 
     def test_pop_without_peer_integration(
-        self, harness: Harness, peer_integration: int, peer_data: PeerData
+        self, mock_model: MagicMock, peer_data: PeerData
     ) -> None:
-        harness.remove_relation(peer_integration)
+        mock_model.get_relation.return_value = None
         assert peer_data.pop("key") == {}
 
-    def test_pop_with_wrong_key(
-        self, harness: Harness, peer_integration: int, peer_data: PeerData
-    ) -> None:
+    def test_pop_with_wrong_key(self, mock_relation: MagicMock, peer_data: PeerData) -> None:
+        peer_data["key"] = "val"
+
         assert peer_data.pop("wrong_key") == {}
         assert peer_data["key"] == "val"
 
-    def test_pop(self, harness: Harness, peer_integration: int, peer_data: PeerData) -> None:
-        assert peer_data.pop("key") == "val"
+    def test_pop(
+        self, mock_relation: MagicMock, mock_model: MagicMock, peer_data: PeerData
+    ) -> None:
+        peer_data["key"] = "val"
+
+        popped = peer_data.pop("key")
+
+        assert popped == "val"
+        assert "key" not in mock_relation.data[mock_model.app]
         assert peer_data["key"] == {}
 
 

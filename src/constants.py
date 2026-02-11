@@ -3,7 +3,7 @@
 
 """Constants for the charm."""
 
-from pathlib import PurePath
+from pathlib import Path, PurePath
 from string import Template
 
 # Charm constants
@@ -24,6 +24,8 @@ OAUTH_SCOPES = "openid,email,profile,offline_access"
 OAUTH_GRANT_TYPES = ["authorization_code", "refresh_token"]
 OAUTH_CALLBACK_PATH = "api/v0/auth/callback"
 DEFAULT_ACCESS_TOKEN_VERIFICATION_STRATEGY = "userinfo"
+CA_BUNDLE_PATH = Path("/etc/ssl/certs/ca-certificates.crt")
+INTEGRATION_CA_BUNDLE_PATH = Path("/usr/local/share/ca-certificates/ca-certificates.crt")
 
 # Integration constants
 DATABASE_INTEGRATION_NAME = "pg-database"

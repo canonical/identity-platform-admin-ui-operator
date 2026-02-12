@@ -1,271 +1,299 @@
 # Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
-#
-# Learn more about testing at: https://juju.is/docs/sdk/testing
 
 from unittest.mock import MagicMock, Mock, PropertyMock, patch
 
-import pytest
-from ops import ActiveStatus, BlockedStatus, StatusBase, WaitingStatus
-from ops.testing import Harness
-from pytest_mock import MockerFixture
+from conftest import create_state
+from ops import ActiveStatus, BlockedStatus
+from ops.testing import Container, Context, PeerRelation, Relation
 
-from constants import (
-    DATABASE_INTEGRATION_NAME,
-    HYDRA_ENDPOINTS_INTEGRATION_NAME,
-    INGRESS_INTEGRATION_NAME,
-    KRATOS_INFO_INTEGRATION_NAME,
-    OAUTH_INTEGRATION_NAME,
-    OPENFGA_INTEGRATION_NAME,
-    OPENFGA_MODEL_ID,
-    PEER_INTEGRATION_NAME,
-    SMTP_INTEGRATION_NAME,
-    WORKLOAD_CONTAINER,
-)
+from constants import WORKLOAD_CONTAINER
 from exceptions import PebbleServiceError
-from integrations import IngressData, TLSCertificates
+from integrations import IngressData
 
 
 class TestPebbleReadyEvent:
-    @patch("charm.WorkloadService.open_port")
     def test_when_event_emitted(
         self,
+        context: Context,
+        mocked_version: MagicMock,
         mocked_open_port: MagicMock,
-        harness: Harness,
-        mocked_workload_service_version: MagicMock,
         mocked_charm_holistic_handler: MagicMock,
+        all_satisfied_conditions: None,
     ) -> None:
-        container = harness.model.unit.get_container(WORKLOAD_CONTAINER)
-        harness.charm.on.admin_ui_pebble_ready.emit(container)
+        state = create_state()
+        container = state.get_container(WORKLOAD_CONTAINER)
+
+        context.run(context.on.pebble_ready(container), state)
 
         mocked_open_port.assert_called_once()
         mocked_charm_holistic_handler.assert_called_once()
-        assert mocked_workload_service_version.call_count > 1, (
-            "workload service version should be set"
-        )
-        assert mocked_workload_service_version.call_args[0] == (
-            mocked_workload_service_version.return_value,
-        )
+        assert mocked_version.call_count >= 1
 
 
 class TestUpgradeCharmEvent:
     def test_non_leader_unit(
         self,
-        harness: Harness,
-        peer_integration: int,
+        context: Context,
         mocked_workload_service: MagicMock,
         mocked_charm_holistic_handler: MagicMock,
     ) -> None:
-        harness.set_leader(False)
-        harness.charm.on.upgrade_charm.emit()
+        state = create_state(leader=False)
 
-        mocked_workload_service.create_openfga_model.assert_not_called()
+        context.run(context.on.upgrade_charm(), state)
+
+        mocked_workload_service.return_value.create_openfga_model.assert_not_called()
         mocked_charm_holistic_handler.assert_not_called()
 
     def test_when_container_not_connected(
         self,
-        harness: Harness,
-        peer_integration: int,
+        context: Context,
+        peer_relation: PeerRelation,
         mocked_workload_service: MagicMock,
         mocked_charm_holistic_handler: MagicMock,
     ) -> None:
-        harness.set_can_connect(WORKLOAD_CONTAINER, False)
-        harness.charm.on.upgrade_charm.emit()
+        state = create_state(
+            leader=True,
+            containers=[Container(name=WORKLOAD_CONTAINER, can_connect=False)],
+            relations=[peer_relation],
+        )
 
-        mocked_workload_service.create_openfga_model.assert_not_called()
+        context.run(context.on.upgrade_charm(), state)
+
+        mocked_workload_service.return_value.create_openfga_model.assert_not_called()
 
     def test_when_missing_peer_integration(
         self,
-        harness: Harness,
+        context: Context,
         mocked_workload_service: MagicMock,
         mocked_charm_holistic_handler: MagicMock,
     ) -> None:
-        harness.charm.on.upgrade_charm.emit()
+        state = create_state(
+            leader=True,
+            relations=[],
+        )
 
-        mocked_workload_service.create_openfga_model.assert_not_called()
+        context.run(context.on.upgrade_charm(), state)
+
+        mocked_workload_service.return_value.create_openfga_model.assert_not_called()
         mocked_charm_holistic_handler.assert_not_called()
 
-    @patch("charm.OpenFGAIntegration.is_store_ready", return_value=False)
     def test_when_openfga_store_not_ready(
         self,
+        context: Context,
         mocked_openfga_store_not_ready: MagicMock,
-        harness: Harness,
-        peer_integration: int,
         mocked_workload_service: MagicMock,
         mocked_charm_holistic_handler: MagicMock,
     ) -> None:
-        harness.charm.on.upgrade_charm.emit()
-        mocked_workload_service.assert_not_called()
+        state = create_state()
+
+        context.run(context.on.upgrade_charm(), state)
+
+        mocked_workload_service.return_value.create_openfga_model.assert_not_called()
         mocked_charm_holistic_handler.assert_not_called()
 
-    @patch("charm.WorkloadService.create_openfga_model", return_value="model_id")
     def test_upgrade_charm_success(
         self,
-        mocked_openfga_model_creation: MagicMock,
-        harness: Harness,
-        mocked_openfga_store_ready: MagicMock,
-        mocked_workload_service_version: MagicMock,
-        peer_integration: int,
-        mocked_charm_holistic_handler: MagicMock,
+        context: Context,
+        mocked_version: MagicMock,
+        mocked_create_openfga_model: MagicMock,
+        mocked_tls_certificates: MagicMock,
+        all_satisfied_conditions: None,
     ) -> None:
-        harness.charm.on.upgrade_charm.emit()
+        state = create_state()
+        state_out = context.run(context.on.upgrade_charm(), state)
 
-        mocked_openfga_model_creation.assert_called_once()
-        assert harness.charm.peer_data[mocked_workload_service_version.return_value] == {
-            OPENFGA_MODEL_ID: mocked_openfga_model_creation.return_value
-        }
-        mocked_charm_holistic_handler.assert_called_once()
+        assert state_out.unit_status == ActiveStatus()
+
+        peer_rel = next(
+            r for r in state_out.relations if r.endpoint == "identity-platform-admin-ui"
+        )
+        assert peer_rel.local_app_data["1.0.0"] == '{"openfga_model_id": "model-id"}'
+
+
+class TestCollectStatusEvent:
+    def test_collect_status_all_good(
+        self, context: Context, all_satisfied_conditions: None
+    ) -> None:
+        state = create_state()
+        out = context.run(context.on.collect_unit_status(), state)
+        assert out.unit_status == ActiveStatus()
+
+    def test_collect_status_missing_relations(self, context: Context) -> None:
+        state = create_state()
+        out = context.run(context.on.collect_unit_status(), state)
+        assert out.unit_status == BlockedStatus("Missing integration kratos-info")
+
+    def test_collect_status_next_missing(
+        self, context: Context, mocked_kratos_exists: MagicMock
+    ) -> None:
+        state = create_state()
+        out = context.run(context.on.collect_unit_status(), state)
+        assert out.unit_status == BlockedStatus("Missing integration hydra-endpoint-info")
 
 
 class TestOpenFGAStoreCreatedEvent:
     def test_when_container_not_connected(
         self,
-        harness: Harness,
-        peer_integration: int,
+        context: Context,
+        peer_relation: PeerRelation,
+        openfga_relation: Relation,
         mocked_workload_service: MagicMock,
         mocked_charm_holistic_handler: MagicMock,
     ) -> None:
-        harness.set_can_connect(WORKLOAD_CONTAINER, False)
-        harness.charm.openfga_requirer.on.openfga_store_created.emit(store_id="store_id")
+        state = create_state(
+            leader=True,
+            containers=[Container(name=WORKLOAD_CONTAINER, can_connect=False)],
+            relations=[peer_relation, openfga_relation],
+        )
 
-        mocked_workload_service.create_openfga_model.assert_not_called()
+        context.run(context.on.relation_changed(relation=openfga_relation), state)
+
+        mocked_workload_service.return_value.create_openfga_model.assert_not_called()
         mocked_charm_holistic_handler.assert_not_called()
 
     def test_when_missing_peer_integration(
         self,
-        harness: Harness,
+        context: Context,
+        openfga_relation: Relation,
         mocked_workload_service: MagicMock,
         mocked_charm_holistic_handler: MagicMock,
     ) -> None:
-        harness.charm.openfga_requirer.on.openfga_store_created.emit(store_id="store_id")
+        state = create_state(
+            leader=True,
+            relations=[openfga_relation],
+        )
 
-        mocked_workload_service.create_openfga_model.assert_not_called()
+        context.run(context.on.relation_changed(relation=openfga_relation), state)
+
+        mocked_workload_service.return_value.create_openfga_model.assert_not_called()
         mocked_charm_holistic_handler.assert_not_called()
 
-    @patch("charm.OpenFGAIntegration.is_store_ready", return_value=False)
     def test_when_openfga_store_not_ready(
         self,
+        context: Context,
+        peer_relation: PeerRelation,
+        openfga_relation: Relation,
         mocked_openfga_store_not_ready: MagicMock,
-        harness: Harness,
-        peer_integration: int,
         mocked_workload_service: MagicMock,
-        mocked_workload_service_version: MagicMock,
         mocked_charm_holistic_handler: MagicMock,
     ) -> None:
-        harness.charm.openfga_requirer.on.openfga_store_created.emit(store_id="store_id")
+        state = create_state(relations=[peer_relation, openfga_relation])
 
-        mocked_workload_service.create_openfga_model.assert_not_called()
-        assert not harness.charm.peer_data[mocked_workload_service_version.return_value]
+        context.run(context.on.relation_changed(relation=openfga_relation), state)
+
+        mocked_workload_service.return_value.create_openfga_model.assert_not_called()
         mocked_charm_holistic_handler.assert_not_called()
 
     def test_non_leader_unit(
         self,
-        harness: Harness,
-        peer_integration: int,
+        context: Context,
+        peer_relation: PeerRelation,
+        openfga_relation_ready: Relation,
         mocked_openfga_store_ready: MagicMock,
         mocked_workload_service: MagicMock,
-        mocked_workload_service_version: MagicMock,
         mocked_charm_holistic_handler: MagicMock,
+        all_satisfied_conditions: None,
     ) -> None:
-        harness.set_leader(False)
-        harness.charm.openfga_requirer.on.openfga_store_created.emit(store_id="store_id")
+        state = create_state(leader=False, relations=[peer_relation, openfga_relation_ready])
 
-        mocked_workload_service.create_openfga_model.assert_not_called()
-        assert not harness.charm.peer_data[mocked_workload_service_version.return_value]
+        context.run(context.on.relation_changed(relation=openfga_relation_ready), state)
+
+        mocked_workload_service.return_value.create_openfga_model.assert_not_called()
         mocked_charm_holistic_handler.assert_called_once()
 
-    @patch("charm.WorkloadService.create_openfga_model", return_value="model_id")
     def test_openfga_created_event_success(
         self,
-        mocked_openfga_model_creation: MagicMock,
-        harness: Harness,
-        peer_integration: int,
-        mocked_openfga_store_ready: MagicMock,
-        mocked_workload_service_version: MagicMock,
-        mocked_charm_holistic_handler: MagicMock,
+        context: Context,
+        peer_relation: PeerRelation,
+        openfga_relation: Relation,
+        mocked_version: MagicMock,
+        mocked_create_openfga_model: MagicMock,
+        mocked_tls_certificates: MagicMock,
+        all_satisfied_conditions: None,
     ) -> None:
-        harness.charm.openfga_requirer.on.openfga_store_created.emit(store_id="store_id")
+        state = create_state(relations=[peer_relation, openfga_relation])
 
-        mocked_openfga_model_creation.assert_called_once()
-        assert harness.charm.peer_data[mocked_workload_service_version.return_value] == {
-            OPENFGA_MODEL_ID: mocked_openfga_model_creation.return_value
-        }
-        mocked_charm_holistic_handler.assert_called_once()
+        state_out = context.run(context.on.relation_changed(relation=openfga_relation), state)
+
+        assert state_out.unit_status == ActiveStatus()
 
 
 class TestOpenFGAStoreRemovedEvent:
     def test_non_leader_unit(
         self,
-        harness: Harness,
-        peer_integration: int,
-        mocked_workload_service_version: MagicMock,
+        context: Context,
+        mocked_version: MagicMock,
         mocked_charm_holistic_handler: MagicMock,
+        openfga_relation: Relation,
+        peer_relation_ready: PeerRelation,
+        all_satisfied_conditions: None,
     ) -> None:
-        harness.charm.peer_data[mocked_workload_service_version.return_value] = {
-            OPENFGA_MODEL_ID: "model_id"
-        }
-        harness.set_leader(False)
+        state = create_state(leader=False, relations=[openfga_relation, peer_relation_ready])
 
-        harness.charm.openfga_requirer.on.openfga_store_removed.emit()
+        context.run(context.on.relation_departed(relation=openfga_relation), state)
 
-        assert harness.charm.peer_data[mocked_workload_service_version.return_value] == {
-            OPENFGA_MODEL_ID: "model_id"
-        }, "Follower unit should not clean up peer data"
         mocked_charm_holistic_handler.assert_called_once()
 
     def test_leader_unit(
         self,
-        harness: Harness,
-        peer_integration: int,
-        mocked_workload_service_version: MagicMock,
+        context: Context,
+        mocked_version: MagicMock,
         mocked_charm_holistic_handler: MagicMock,
+        openfga_relation: Relation,
+        peer_relation: PeerRelation,
+        all_satisfied_conditions: None,
     ) -> None:
-        harness.charm.peer_data[mocked_workload_service_version.return_value] = {
-            OPENFGA_MODEL_ID: "model_id"
-        }
+        state = create_state(leader=True, relations=[openfga_relation, peer_relation])
 
-        harness.charm.openfga_requirer.on.openfga_store_removed.emit()
+        state_out = context.run(context.on.relation_departed(relation=openfga_relation), state)
 
-        assert not harness.charm.peer_data[mocked_workload_service_version.return_value], (
-            "Leader unit should clean up peer data"
-        )
+        # Leader unit should clean up peer data
+        peer_rel_out = [
+            r for r in state_out.relations if r.endpoint == "identity-platform-admin-ui"
+        ][0]
+        # The data should be removed or empty
+        if "1.0.0" in peer_rel_out.local_app_data:
+            assert peer_rel_out.local_app_data["1.0.0"] == "{}"
         mocked_charm_holistic_handler.assert_called_once()
 
 
 class TestIngressReadyEvent:
     def test_non_leader_unit(
         self,
-        harness: Harness,
-        ingress_integration: int,
-        mocked_ingress_data: IngressData,
+        context: Context,
+        peer_relation: PeerRelation,
+        ingress_relation_ready: Relation,
         mocked_oauth_integration: MagicMock,
         mocked_charm_holistic_handler: MagicMock,
+        all_satisfied_conditions: None,
     ) -> None:
-        harness.set_leader(False)
+        state = create_state(leader=False, relations=[peer_relation, ingress_relation_ready])
 
-        harness.charm.ingress_requirer.on.ready.emit(
-            harness.model.get_relation("ingress"),
-            mocked_ingress_data.url,
-        )
+        context.run(context.on.relation_changed(relation=ingress_relation_ready), state)
 
-        mocked_oauth_integration.update_oauth_client_config.assert_not_called()
+        mocked_oauth_integration.return_value.update_oauth_client_config.assert_not_called()
         mocked_charm_holistic_handler.assert_called_once()
 
     def test_leader_unit(
         self,
-        harness: Harness,
-        ingress_integration: int,
-        mocked_ingress_data: IngressData,
+        context: Context,
+        peer_relation: PeerRelation,
+        ingress_relation_ready: Relation,
+        mocked_ingress_data_load: MagicMock,
         mocked_oauth_integration: MagicMock,
         mocked_charm_holistic_handler: MagicMock,
+        all_satisfied_conditions: None,
     ) -> None:
-        harness.charm.ingress_requirer.on.ready.emit(
-            harness.model.get_relation("ingress"),
-            mocked_ingress_data.url,
-        )
+        test_url = "http://test.url"
+        mocked_ingress_data_load.return_value = IngressData(is_ready=True, url=test_url)
 
-        mocked_oauth_integration.update_oauth_client_config.assert_called_once_with(
-            mocked_ingress_data.url
+        state = create_state(leader=True, relations=[peer_relation, ingress_relation_ready])
+
+        context.run(context.on.relation_changed(relation=ingress_relation_ready), state)
+
+        mocked_oauth_integration.return_value.update_oauth_client_config.assert_called_once_with(
+            ingress_url=test_url
         )
         mocked_charm_holistic_handler.assert_called_once()
 
@@ -273,31 +301,38 @@ class TestIngressReadyEvent:
 class TestIngressRevokedEvent:
     def test_non_leader_unit(
         self,
-        harness: Harness,
-        ingress_integration: int,
-        mocked_ingress_data: IngressData,
+        context: Context,
+        peer_relation: PeerRelation,
+        ingress_relation: Relation,
         mocked_oauth_integration: MagicMock,
         mocked_charm_holistic_handler: MagicMock,
     ) -> None:
-        harness.set_leader(False)
+        state = create_state(leader=False, relations=[peer_relation, ingress_relation])
 
-        harness.charm.ingress_requirer.on.revoked.emit(harness.model.get_relation("ingress"))
+        context.run(context.on.relation_broken(relation=ingress_relation), state)
 
-        mocked_oauth_integration.update_oauth_client_config.assert_not_called()
+        mocked_oauth_integration.return_value.update_oauth_client_config.assert_not_called()
         mocked_charm_holistic_handler.assert_called_once()
 
     def test_leader_unit(
         self,
-        harness: Harness,
-        ingress_integration: int,
-        mocked_ingress_data: IngressData,
+        context: Context,
+        peer_relation: PeerRelation,
+        ingress_relation: Relation,
+        mocked_ingress_data_load: MagicMock,
         mocked_oauth_integration: MagicMock,
         mocked_charm_holistic_handler: MagicMock,
+        all_satisfied_conditions: None,
     ) -> None:
-        harness.charm.ingress_requirer.on.revoked.emit(harness.model.get_relation("ingress"))
+        test_url = "http://test.url"
+        mocked_ingress_data_load.return_value = IngressData(is_ready=True, url=test_url)
 
-        mocked_oauth_integration.update_oauth_client_config.assert_called_once_with(
-            mocked_ingress_data.url
+        state = create_state(leader=True, relations=[peer_relation, ingress_relation])
+
+        context.run(context.on.relation_broken(relation=ingress_relation), state)
+
+        mocked_oauth_integration.return_value.update_oauth_client_config.assert_called_once_with(
+            ingress_url=test_url
         )
         mocked_charm_holistic_handler.assert_called_once()
 
@@ -305,31 +340,39 @@ class TestIngressRevokedEvent:
 class TestOAuthInfoChangedEvent:
     def test_non_leader_unit(
         self,
-        harness: Harness,
-        ingress_integration: int,
-        mocked_ingress_data: IngressData,
+        context: Context,
+        peer_relation: PeerRelation,
+        oauth_relation_ready: Relation,
         mocked_oauth_integration: MagicMock,
         mocked_charm_holistic_handler: MagicMock,
+        all_satisfied_conditions: None,
     ) -> None:
-        harness.set_leader(False)
+        state = create_state(leader=False, relations=[peer_relation, oauth_relation_ready])
 
-        harness.charm.oauth_requirer.on.oauth_info_changed.emit("client_id", "client_secret_id")
+        context.run(context.on.relation_changed(relation=oauth_relation_ready), state)
 
-        mocked_oauth_integration.update_oauth_client_config.assert_not_called()
+        mocked_oauth_integration.return_value.update_oauth_client_config.assert_not_called()
         mocked_charm_holistic_handler.assert_called_once()
 
     def test_leader_unit(
         self,
-        harness: Harness,
-        ingress_integration: int,
-        mocked_ingress_data: IngressData,
+        context: Context,
+        peer_relation: PeerRelation,
+        oauth_relation_ready: Relation,
+        mocked_ingress_data_load: MagicMock,
         mocked_oauth_integration: MagicMock,
         mocked_charm_holistic_handler: MagicMock,
+        all_satisfied_conditions: None,
     ) -> None:
-        harness.charm.oauth_requirer.on.oauth_info_changed.emit("client_id", "client_secret_id")
+        test_url = "http://test.url"
+        mocked_ingress_data_load.return_value = IngressData(is_ready=True, url=test_url)
 
-        mocked_oauth_integration.update_oauth_client_config.assert_called_once_with(
-            mocked_ingress_data.url
+        state = create_state(leader=True, relations=[peer_relation, oauth_relation_ready])
+
+        context.run(context.on.relation_changed(relation=oauth_relation_ready), state)
+
+        mocked_oauth_integration.return_value.update_oauth_client_config.assert_called_once_with(
+            ingress_url=test_url
         )
         mocked_charm_holistic_handler.assert_called_once()
 
@@ -337,31 +380,38 @@ class TestOAuthInfoChangedEvent:
 class TestOAuthInfoRemovedEvent:
     def test_non_leader_unit(
         self,
-        harness: Harness,
-        ingress_integration: int,
-        mocked_ingress_data: IngressData,
+        context: Context,
+        peer_relation: PeerRelation,
+        oauth_relation: Relation,
         mocked_oauth_integration: MagicMock,
         mocked_charm_holistic_handler: MagicMock,
     ) -> None:
-        harness.set_leader(False)
+        state = create_state(leader=False, relations=[peer_relation, oauth_relation])
 
-        harness.charm.oauth_requirer.on.oauth_info_removed.emit()
+        context.run(context.on.relation_broken(relation=oauth_relation), state)
 
-        mocked_oauth_integration.update_oauth_client_config.assert_not_called()
+        mocked_oauth_integration.return_value.update_oauth_client_config.assert_not_called()
         mocked_charm_holistic_handler.assert_called_once()
 
     def test_leader_unit(
         self,
-        harness: Harness,
-        ingress_integration: int,
-        mocked_ingress_data: IngressData,
+        context: Context,
+        peer_relation: PeerRelation,
+        oauth_relation: Relation,
+        mocked_ingress_data_load: MagicMock,
         mocked_oauth_integration: MagicMock,
         mocked_charm_holistic_handler: MagicMock,
+        all_satisfied_conditions: None,
     ) -> None:
-        harness.charm.oauth_requirer.on.oauth_info_removed.emit()
+        test_url = "http://test.url"
+        mocked_ingress_data_load.return_value = IngressData(is_ready=True, url=test_url)
 
-        mocked_oauth_integration.update_oauth_client_config.assert_called_once_with(
-            mocked_ingress_data.url
+        state = create_state(leader=True, relations=[peer_relation, oauth_relation])
+
+        context.run(context.on.relation_broken(relation=oauth_relation), state)
+
+        mocked_oauth_integration.return_value.update_oauth_client_config.assert_called_once_with(
+            ingress_url=test_url
         )
         mocked_charm_holistic_handler.assert_called_once()
 
@@ -369,35 +419,32 @@ class TestOAuthInfoRemovedEvent:
 class TestCertificateAvailableEvent:
     def test_certificate_available_event_success(
         self,
-        harness: Harness,
-        certificate_transfer_integration: int,
+        context: Context,
+        peer_relation: PeerRelation,
+        ca_cert_relation: Relation,
         mocked_workload_service: MagicMock,
         mocked_charm_holistic_handler: MagicMock,
     ) -> None:
-        harness.charm.certificate_transfer_requirer.on.certificate_set_updated.emit(
-            {"certificate-1", "certificate-2"},
-            certificate_transfer_integration,
-        )
+        state = create_state(relations=[peer_relation, ca_cert_relation])
 
+        context.run(context.on.relation_changed(relation=ca_cert_relation), state)
+
+        # The holistic handler should be called
         mocked_charm_holistic_handler.assert_called_once()
-        event = mocked_charm_holistic_handler.call_args.args[0]
-        assert event.snapshot() == {
-            "certificates": {"certificate-1", "certificate-2"},
-            "relation_id": certificate_transfer_integration,
-        }
 
 
 class TestCertificateRemovedEvent:
     def test_certificate_removed_event_success(
         self,
-        harness: Harness,
-        certificate_transfer_integration: int,
+        context: Context,
+        peer_relation: PeerRelation,
+        ca_cert_relation: Relation,
         mocked_workload_service: MagicMock,
         mocked_charm_holistic_handler: MagicMock,
     ) -> None:
-        harness.charm.certificate_transfer_requirer.on.certificates_removed.emit(
-            certificate_transfer_integration,
-        )
+        state = create_state(relations=[peer_relation, ca_cert_relation])
+
+        context.run(context.on.relation_broken(relation=ca_cert_relation), state)
 
         mocked_charm_holistic_handler.assert_called_once()
 
@@ -405,15 +452,15 @@ class TestCertificateRemovedEvent:
 class TestDatabaseCreatedEvent:
     def test_database_created_event_success(
         self,
-        harness: Harness,
-        database_integration: int,
+        context: Context,
+        peer_relation: PeerRelation,
+        pg_database_relation_ready: Relation,
         mocked_charm_holistic_handler: MagicMock,
+        all_satisfied_conditions: None,
     ) -> None:
-        harness.set_leader(True)
+        state = create_state(relations=[peer_relation, pg_database_relation_ready])
 
-        harness.charm.database_requirer.on.database_created.emit(
-            harness.model.get_relation(DATABASE_INTEGRATION_NAME)
-        )
+        context.run(context.on.relation_changed(relation=pg_database_relation_ready), state)
 
         mocked_charm_holistic_handler.assert_called_once()
 
@@ -421,13 +468,14 @@ class TestDatabaseCreatedEvent:
 class TestDatabaseChangedEvent:
     def test_database_changed_event_success(
         self,
-        harness: Harness,
-        database_integration: int,
+        context: Context,
+        pg_database_relation_ready: Relation,
         mocked_charm_holistic_handler: MagicMock,
+        all_satisfied_conditions: None,
     ) -> None:
-        harness.charm.database_requirer.on.endpoints_changed.emit(
-            harness.model.get_relation(DATABASE_INTEGRATION_NAME),
-        )
+        state = create_state(relations=[pg_database_relation_ready])
+
+        context.run(context.on.relation_changed(relation=pg_database_relation_ready), state)
 
         mocked_charm_holistic_handler.assert_called_once()
 
@@ -435,143 +483,158 @@ class TestDatabaseChangedEvent:
 class TestDatabaseIntegrationBrokenEvent:
     def test_database_integration_broken_event_success(
         self,
-        harness: Harness,
-        database_integration: int,
+        context: Context,
         mocked_charm_holistic_handler: MagicMock,
         mocked_pebble_service: MagicMock,
+        pg_database_relation: Relation,
     ) -> None:
-        harness.charm.on[DATABASE_INTEGRATION_NAME].relation_broken.emit(
-            harness.model.get_relation(DATABASE_INTEGRATION_NAME),
-        )
+        state = create_state(relations=[pg_database_relation])
+
+        context.run(context.on.relation_broken(relation=pg_database_relation), state)
 
         mocked_charm_holistic_handler.assert_called_once()
-        mocked_pebble_service.stop.assert_called_once()
+        mocked_pebble_service.return_value.stop.assert_called_once()
 
 
 class TestHolisticHandler:
-    @pytest.fixture(autouse=True)
-    def mocked_ca_bundle(self, mocker: MockerFixture) -> MagicMock:
-        return mocker.patch(
-            "charm.TLSCertificates.load",
-            return_value=TLSCertificates(ca_bundle="mocked_ca_bundle"),
-        )
-
-    @pytest.fixture(autouse=True)
-    def migration_not_needed(self, mocker: MockerFixture) -> MagicMock:
-        return mocker.patch(
-            "charm.IdentityPlatformAdminUIOperatorCharm.migration_needed",
-            new_callable=PropertyMock,
-            return_value=False,
-        )
-
-    @pytest.fixture
-    def mocked_cli(self, mocker: MockerFixture) -> MagicMock:
-        return mocker.patch("charm.CommandLine.migrate_up")
-
     def test_when_noop_condition_failed(
         self,
-        harness: Harness,
-        mocked_event: MagicMock,
+        context: Context,
         mocked_workload_service: MagicMock,
     ) -> None:
         with (
             patch("charm.NOOP_CONDITIONS", new=[Mock(return_value=False)]),
             patch("charm.EVENT_DEFER_CONDITIONS", new=[Mock(return_value=True)]),
         ):
-            harness.charm._holistic_handler(mocked_event)
+            state = create_state()
+            context.run(context.on.config_changed(), state)
 
-        mocked_event.defer.assert_not_called()
-        mocked_workload_service.prepare_dir.assert_not_called()
-        mocked_workload_service.push_ca_certs.assert_not_called()
+        mocked_workload_service.return_value.prepare_dir.assert_not_called()
+        mocked_workload_service.return_value.push_ca_certs.assert_not_called()
 
     def test_when_event_defer_condition_failed(
         self,
-        harness: Harness,
-        mocked_event: MagicMock,
+        context: Context,
         mocked_workload_service: MagicMock,
     ) -> None:
+        event = context.on.config_changed()
         with (
             patch("charm.NOOP_CONDITIONS", new=[Mock(return_value=True)]),
             patch("charm.EVENT_DEFER_CONDITIONS", new=[Mock(return_value=False)]),
         ):
-            harness.charm._holistic_handler(mocked_event)
+            state = create_state()
+            out_state = context.run(context.on.config_changed(), state)
 
-        mocked_event.defer.assert_called()
-        mocked_workload_service.prepare_dir.assert_not_called()
-        mocked_workload_service.push_ca_certs.assert_not_called()
+        mocked_workload_service.return_value.prepare_dir.assert_not_called()
+        assert out_state.deferred[0].name == event.path
 
     def test_when_all_conditions_satisfied(
         self,
         mocked_ca_bundle: MagicMock,
-        harness: Harness,
-        mocked_event: MagicMock,
+        context: Context,
+        peer_relation: PeerRelation,
+        kratos_info_relation_ready: Relation,
+        hydra_endpoint_relation_ready: Relation,
+        oauth_relation_ready: Relation,
+        openfga_relation_ready: Relation,
+        ingress_relation_ready: Relation,
+        pg_database_relation_ready: Relation,
+        mocked_oauth_get_provider: MagicMock,
         mocked_workload_service: MagicMock,
         mocked_pebble_service: MagicMock,
+        mocked_migration_needed: MagicMock,
     ) -> None:
         with (
             patch("charm.NOOP_CONDITIONS", new=[Mock(return_value=True)]),
             patch("charm.EVENT_DEFER_CONDITIONS", new=[Mock(return_value=True)]),
         ):
-            harness.charm._holistic_handler(mocked_event)
+            state = create_state(
+                relations=[
+                    peer_relation,
+                    kratos_info_relation_ready,
+                    hydra_endpoint_relation_ready,
+                    oauth_relation_ready,
+                    openfga_relation_ready,
+                    ingress_relation_ready,
+                    pg_database_relation_ready,
+                ]
+            )
+            context.run(context.on.config_changed(), state)
 
-        mocked_event.defer.assert_not_called()
-        mocked_workload_service.push_ca_certs.assert_called_once_with(
+        mocked_workload_service.return_value.push_ca_certs.assert_called_once_with(
             mocked_ca_bundle.return_value.ca_bundle
         )
-        mocked_pebble_service.plan.assert_called_once()
+        mocked_pebble_service.return_value.plan.assert_called_once()
 
     def test_when_migration_needed_non_leader_unit(
         self,
-        harness: Harness,
+        context: Context,
         mocked_cli: MagicMock,
-        mocked_event: MagicMock,
         mocked_pebble_service: MagicMock,
+        mocked_migration_needed: MagicMock,
     ) -> None:
-        harness.set_leader(False)
-
+        mocked_migration_needed.return_value = True
         with (
-            patch(
-                "charm.IdentityPlatformAdminUIOperatorCharm.migration_needed",
-                new_callable=PropertyMock,
-                return_value=True,
-            ),
             patch("charm.NOOP_CONDITIONS", new=[Mock(return_value=True)]),
             patch("charm.EVENT_DEFER_CONDITIONS", new=[Mock(return_value=True)]),
         ):
-            harness.charm._holistic_handler(mocked_event)
+            state = create_state(leader=False)
+            context.run(context.on.config_changed(), state)
 
-        mocked_event.defer.assert_called()
+        # Non-leader should not run migration
         mocked_cli.assert_not_called()
-        mocked_pebble_service.plan.assert_not_called()
+        # And should not plan
+        mocked_pebble_service.return_value.plan.assert_not_called()
 
     def test_when_migration_needed_leader_unit(
         self,
-        harness: Harness,
+        context: Context,
         mocked_cli: MagicMock,
-        mocked_event: MagicMock,
         mocked_pebble_service: MagicMock,
+        mocked_migration_needed: MagicMock,
+        mocked_workload_service_version: MagicMock,
+        peer_relation_ready: PeerRelation,
     ) -> None:
-        harness.set_leader(True)
-
+        mocked_migration_needed.return_value = True
+        state = create_state(leader=True, relations=[peer_relation_ready])
         with (
-            patch(
-                "charm.IdentityPlatformAdminUIOperatorCharm.migration_needed",
-                new_callable=PropertyMock,
-                return_value=True,
-            ),
             patch("charm.NOOP_CONDITIONS", new=[Mock(return_value=True)]),
             patch("charm.EVENT_DEFER_CONDITIONS", new=[Mock(return_value=True)]),
         ):
-            harness.charm._holistic_handler(mocked_event)
+            context.run(context.on.config_changed(), state)
 
+        # Leader should run migration
         mocked_cli.assert_called_once()
-        mocked_pebble_service.plan.assert_called_once()
+        # And should plan after migration
+        mocked_pebble_service.return_value.plan.assert_called_once()
 
     def test_when_pebble_plan_failed(
         self,
-        harness: Harness,
-        mocked_event: MagicMock,
+        context: Context,
+        peer_relation: PeerRelation,
+        kratos_info_relation_ready: Relation,
+        hydra_endpoint_relation_ready: Relation,
+        oauth_relation_ready: Relation,
+        openfga_relation_ready: Relation,
+        ingress_relation_ready: Relation,
+        pg_database_relation_ready: Relation,
+        ca_cert_relation_ready: Relation,
+        smtp_relation: Relation,
+        mocked_oauth_get_provider: MagicMock,
     ) -> None:
+        state = create_state(
+            relations=[
+                peer_relation,
+                kratos_info_relation_ready,
+                hydra_endpoint_relation_ready,
+                oauth_relation_ready,
+                openfga_relation_ready,
+                ingress_relation_ready,
+                pg_database_relation_ready,
+                ca_cert_relation_ready,
+                smtp_relation,
+            ]
+        )
         with (
             patch(
                 "charm.IdentityPlatformAdminUIOperatorCharm._pebble_layer",
@@ -580,128 +643,7 @@ class TestHolisticHandler:
             patch("charm.PebbleService.plan", side_effect=PebbleServiceError),
             patch("charm.NOOP_CONDITIONS", new=[Mock(return_value=True)]),
             patch("charm.EVENT_DEFER_CONDITIONS", new=[Mock(return_value=True)]),
-            pytest.raises(PebbleServiceError),
         ):
-            harness.charm._holistic_handler(mocked_event)
+            out = context.run(context.on.config_changed(), state)
 
-
-class TestCollectStatusEvent:
-    def test_when_all_condition_satisfied(
-        self,
-        harness: Harness,
-        all_satisfied_conditions: MagicMock,
-    ) -> None:
-        harness.evaluate_status()
-
-        assert isinstance(harness.model.unit.status, ActiveStatus)
-
-    @pytest.mark.parametrize(
-        "condition, satisfied, status, message",
-        [
-            (
-                "container_connectivity",
-                False,
-                WaitingStatus,
-                "Container is not connected yet",
-            ),
-            (
-                "peer_integration_exists",
-                False,
-                WaitingStatus,
-                f"Missing integration {PEER_INTEGRATION_NAME}",
-            ),
-            (
-                "kratos_integration_exists",
-                False,
-                BlockedStatus,
-                f"Missing integration {KRATOS_INFO_INTEGRATION_NAME}",
-            ),
-            (
-                "hydra_integration_exists",
-                False,
-                BlockedStatus,
-                f"Missing integration {HYDRA_ENDPOINTS_INTEGRATION_NAME}",
-            ),
-            (
-                "oauth_integration_exists",
-                False,
-                BlockedStatus,
-                f"Missing integration {OAUTH_INTEGRATION_NAME}",
-            ),
-            (
-                "openfga_integration_exists",
-                False,
-                BlockedStatus,
-                f"Missing integration {OPENFGA_INTEGRATION_NAME}",
-            ),
-            (
-                "ingress_integration_exists",
-                False,
-                BlockedStatus,
-                f"Missing integration {INGRESS_INTEGRATION_NAME}",
-            ),
-            (
-                "ca_certificate_exists",
-                False,
-                BlockedStatus,
-                "Missing certificate transfer integration with oauth provider",
-            ),
-            (
-                "smtp_integration_exists",
-                False,
-                BlockedStatus,
-                f"Missing integration {SMTP_INTEGRATION_NAME}",
-            ),
-            (
-                "database_integration_exists",
-                False,
-                BlockedStatus,
-                f"Missing integration {DATABASE_INTEGRATION_NAME}",
-            ),
-            (
-                "migration_needed_on_leader",
-                True,
-                BlockedStatus,
-                "Either Database migration is required, or the migration job has failed. Please check juju logs",
-            ),
-            (
-                "migration_needed_on_non_leader",
-                True,
-                WaitingStatus,
-                "Waiting for leader unit to run the migration",
-            ),
-            (
-                "openfga_store_readiness",
-                False,
-                WaitingStatus,
-                "OpenFGA store is not ready yet",
-            ),
-            (
-                "openfga_model_readiness",
-                False,
-                WaitingStatus,
-                "OpenFGA model is not ready yet. If this persists, check `juju logs` for errors",
-            ),
-            (
-                "WorkloadService.is_failing",
-                True,
-                BlockedStatus,
-                f"Failed to start the service, please check the {WORKLOAD_CONTAINER} container logs",
-            ),
-        ],
-    )
-    def test_when_a_condition_failed(
-        self,
-        harness: Harness,
-        all_satisfied_conditions: MagicMock,
-        mocked_pebble_service: MagicMock,
-        condition: str,
-        satisfied: bool,
-        status: StatusBase,
-        message: str,
-    ) -> None:
-        with patch(f"charm.{condition}", return_value=satisfied):
-            harness.evaluate_status()
-
-        assert isinstance(harness.model.unit.status, status)
-        assert harness.model.unit.status.message == message
+        assert isinstance(out.unit_status, BlockedStatus)

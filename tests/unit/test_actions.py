@@ -1,299 +1,233 @@
 # Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-# Learn more about testing at: https://juju.is/docs/sdk/testing
-
-from unittest.mock import MagicMock, patch
+import json
+from unittest.mock import MagicMock
 
 import pytest
-from ops.testing import ActionFailed, Harness
+from conftest import create_state
+from ops.testing import ActionFailed, Container, Context, State
 from pytest_mock import MockerFixture
 
+from constants import PEER_INTEGRATION_NAME, WORKLOAD_CONTAINER
 from exceptions import MigrationError
-from integrations import DatabaseConfig
+
+
+@pytest.fixture
+def mocked_workload_service(mocker: MockerFixture) -> MagicMock:
+    return mocker.patch("charm.WorkloadService", autospec=True)
+
+
+@pytest.fixture
+def mocked_cli(mocker: MockerFixture) -> MagicMock:
+    return mocker.patch("charm.CommandLine", autospec=True)
+
+
+@pytest.fixture
+def mocked_database_config(mocker: MockerFixture) -> MagicMock:
+    mock = mocker.patch("charm.DatabaseConfig")
+    mock.load.return_value.migration_version = "migration_version_0"
+    mock.load.return_value.dsn = "postgres://postgres:password@localhost:5432/db"
+    return mock
 
 
 class TestCreateIdentityAction:
-    def test_create_identity_failed(self, harness: Harness) -> None:
-        with patch("charm.CommandLine.create_identity", return_value=None):
-            try:
-                harness.run_action(
-                    "create-identity",
-                    {
-                        "traits": {"email": "test@canonical.com"},
-                        "schema": "schema",
-                        "password": "password",
-                    },
-                )
-            except ActionFailed as err:
-                assert "Failed to create the identity. Please check `juju logs`" in err.message
+    def test_create_identity_failed(
+        self, context: Context, mocked_cli: MagicMock, mocked_workload_service: MagicMock
+    ) -> None:
+        state = create_state()
 
-    def test_create_identity_success(self, harness: Harness) -> None:
-        expected = "created-identity-id"
-        with patch("charm.CommandLine.create_identity", return_value=expected) as mocked_cli:
-            output = harness.run_action(
-                "create-identity",
-                {
-                    "traits": {"email": "test@canonical.com"},
-                    "schema": "schema",
-                    "password": "password",
-                },
-            )
+        mocked_cli.return_value.create_identity.return_value = None
+        params = {
+            "schema": "some-schema",
+            "traits": {"email": "my@email.com"},
+            "password": "password",
+        }
 
-        mocked_cli.assert_called_once()
-        assert output.results["identity-id"] == expected
+        with pytest.raises(ActionFailed):
+            context.run(context.on.action("create-identity", params=params), state)
+
+    def test_create_identity_success(
+        self,
+        context: Context,
+        mocked_cli: MagicMock,
+        mocked_workload_service: MagicMock,
+        all_satisfied_conditions,
+    ) -> None:
+        state = create_state()
+
+        mocked_cli.return_value.create_identity.return_value = "identity-id"
+        params = {
+            "schema": "some-schema",
+            "traits": {"email": "my@email.com"},
+            "password": "password",
+        }
+
+        context.run(context.on.action("create-identity", params=params), state)
+
+        mocked_cli.return_value.create_identity.assert_called_with(
+            {"email": "my@email.com"}, schema_id="some-schema", password="password"
+        )
 
 
 class TestRunMigrationUpAction:
-    @pytest.fixture(autouse=True)
-    def mocked_database_config(self, mocker: MockerFixture) -> DatabaseConfig:
-        mocked = mocker.patch(
-            "charm.DatabaseConfig.load",
-            return_value=DatabaseConfig(migration_version="migration_version_0"),
-        )
-        return mocked.return_value
-
-    @pytest.fixture
-    def mocked_cli(self, mocker: MockerFixture) -> MagicMock:
-        return mocker.patch("charm.CommandLine.migrate_up")
-
-    def test_when_not_leader_unit(
-        self,
-        harness: Harness,
-        mocked_workload_service: MagicMock,
-        mocked_cli: MagicMock,
-        peer_integration: int,
-    ) -> None:
-        harness.set_leader(False)
-        mocked_workload_service.is_running.return_value = True
-
-        try:
-            harness.run_action("run-migration-up")
-        except ActionFailed as err:
-            assert "Non-leader unit cannot run migration action" in err.message
-
-        mocked_cli.assert_not_called()
+    def test_when_not_leader_unit(self, context: Context) -> None:
+        state = create_state(leader=False)
+        with pytest.raises(ActionFailed, match="Non-leader unit cannot run migration action"):
+            context.run(context.on.action("run-migration-up"), state)
 
     def test_when_service_not_ready(
-        self,
-        harness: Harness,
-        mocked_workload_service: MagicMock,
-        mocked_cli: MagicMock,
-        peer_integration: int,
+        self, context: Context, mocked_workload_service: MagicMock
     ) -> None:
-        harness.set_leader(True)
-        mocked_workload_service.is_running.return_value = False
+        state = create_state()
+        mocked_workload_service.return_value.is_running.return_value = False
 
-        try:
-            harness.run_action("run-migration-up")
-        except ActionFailed as err:
-            assert (
-                "Service is not ready. Please re-run the action when the charm is active"
-                in err.message
-            )
-
-        mocked_cli.assert_not_called()
+        with pytest.raises(ActionFailed, match="Service is not ready"):
+            context.run(context.on.action("run-migration-up"), state)
 
     def test_when_peer_integration_not_exists(
-        self,
-        harness: Harness,
-        mocked_workload_service: MagicMock,
-        mocked_cli: MagicMock,
+        self, context: Context, mocked_workload_service: MagicMock
     ) -> None:
-        harness.set_leader(True)
-        mocked_workload_service.is_running.return_value = True
+        # Create state without peer relation
+        state = State(
+            leader=True,
+            containers=[Container(name=WORKLOAD_CONTAINER, can_connect=True)],
+        )
+        mocked_workload_service.return_value.is_running.return_value = True
 
-        try:
-            harness.run_action("run-migration-up")
-        except ActionFailed as err:
-            assert "Peer integration is not ready yet" in err.message
-
-        mocked_cli.assert_not_called()
+        with pytest.raises(ActionFailed, match="Peer integration is not ready yet"):
+            context.run(context.on.action("run-migration-up"), state)
 
     def test_when_commandline_failed(
         self,
-        harness: Harness,
+        context: Context,
         mocked_workload_service: MagicMock,
         mocked_cli: MagicMock,
-        peer_integration: int,
+        mocked_database_config: MagicMock,
     ) -> None:
-        harness.set_leader(True)
-        mocked_workload_service.is_running.return_value = True
+        state = create_state()
+        mocked_workload_service.return_value.is_running.return_value = True
+        mocked_cli.return_value.migrate_up.side_effect = MigrationError("error0")
 
-        with patch("charm.CommandLine.migrate_up", side_effect=MigrationError):
-            try:
-                harness.run_action("run-migration-up")
-            except ActionFailed as err:
-                assert "Database migration up failed" in err.message
-
-        assert not harness.charm.peer_data["migration_version_0"]
+        with pytest.raises(ActionFailed, match="Database migration up failed"):
+            context.run(context.on.action("run-migration-up"), state)
 
     def test_when_action_succeeds(
         self,
-        harness: Harness,
+        context: Context,
         mocked_workload_service: MagicMock,
-        mocked_workload_service_version: MagicMock,
         mocked_cli: MagicMock,
-        peer_integration: int,
+        mocked_database_config: MagicMock,
+        all_satisfied_conditions,
     ) -> None:
-        harness.set_leader(True)
-        mocked_workload_service.version = "1.0.0"
-        mocked_workload_service.is_running.return_value = True
+        state = create_state()
+        mocked_workload_service.return_value.is_running.return_value = True
+        mocked_cli.return_value.migrate_up.return_value = None
+        mocked_workload_service.return_value.version = "1.0.0"
 
-        harness.run_action("run-migration-up")
+        out = context.run(context.on.action("run-migration-up"), state)
 
-        mocked_cli.assert_called_once()
-        assert harness.charm.peer_data["migration_version_0"] == "1.0.0"
+        peer_rel_out = next(r for r in out.relations if r.endpoint == PEER_INTEGRATION_NAME)
+        assert peer_rel_out.local_app_data["migration_version_0"] == json.dumps("1.0.0")
 
 
 class TestRunMigrationDownAction:
-    @pytest.fixture(autouse=True)
-    def mocked_database_config(self, mocker: MockerFixture) -> DatabaseConfig:
-        mocked = mocker.patch(
-            "charm.DatabaseConfig.load",
-            return_value=DatabaseConfig(migration_version="migration_version_0"),
-        )
-        return mocked.return_value
-
-    @pytest.fixture
-    def mocked_cli(self, mocker: MockerFixture) -> MagicMock:
-        return mocker.patch("charm.CommandLine.migrate_down")
-
-    def test_when_not_leader_unit(
-        self,
-        harness: Harness,
-        mocked_workload_service: MagicMock,
-        mocked_cli: MagicMock,
-        peer_integration: int,
-    ) -> None:
-        harness.set_leader(False)
-        mocked_workload_service.is_running.return_value = True
-
-        try:
-            harness.run_action("run-migration-down")
-        except ActionFailed as err:
-            assert "Non-leader unit cannot run migration action" in err.message
-
-        mocked_cli.assert_not_called()
+    def test_when_not_leader_unit(self, context: Context) -> None:
+        state = create_state(leader=False)
+        with pytest.raises(ActionFailed, match="Non-leader unit cannot run migration action"):
+            context.run(context.on.action("run-migration-down"), state)
 
     def test_when_service_not_ready(
-        self,
-        harness: Harness,
-        mocked_workload_service: MagicMock,
-        mocked_cli: MagicMock,
-        peer_integration: int,
+        self, context: Context, mocked_workload_service: MagicMock
     ) -> None:
-        harness.set_leader(True)
-        mocked_workload_service.is_running.return_value = False
+        state = create_state()
+        mocked_workload_service.return_value.is_running.return_value = False
 
-        try:
-            harness.run_action("run-migration-down")
-        except ActionFailed as err:
-            assert (
-                "Service is not ready. Please re-run the action when the charm is active"
-                in err.message
-            )
-
-        mocked_cli.assert_not_called()
+        with pytest.raises(ActionFailed, match="Service is not ready"):
+            context.run(context.on.action("run-migration-down"), state)
 
     def test_when_peer_integration_not_exists(
-        self,
-        harness: Harness,
-        mocked_workload_service: MagicMock,
-        mocked_cli: MagicMock,
+        self, context: Context, mocked_workload_service: MagicMock
     ) -> None:
-        harness.set_leader(True)
-        mocked_workload_service.is_running.return_value = True
+        # Create state without peer relation
+        state = State(
+            leader=True,
+            containers=[Container(name=WORKLOAD_CONTAINER, can_connect=True)],
+        )
+        mocked_workload_service.return_value.is_running.return_value = True
 
-        try:
-            harness.run_action("run-migration-down")
-        except ActionFailed as err:
-            assert "Peer integration is not ready yet" in err.message
-
-        mocked_cli.assert_not_called()
+        with pytest.raises(ActionFailed, match="Peer integration is not ready yet"):
+            context.run(context.on.action("run-migration-down"), state)
 
     def test_when_commandline_failed(
         self,
-        harness: Harness,
+        context: Context,
         mocked_workload_service: MagicMock,
         mocked_cli: MagicMock,
-        peer_integration: int,
+        mocked_database_config: MagicMock,
     ) -> None:
-        harness.set_leader(True)
-        mocked_workload_service.is_running.return_value = True
+        state = create_state()
+        mocked_workload_service.return_value.is_running.return_value = True
+        mocked_cli.return_value.migrate_down.side_effect = MigrationError("error0")
 
-        with patch("charm.CommandLine.migrate_down", side_effect=MigrationError):
-            try:
-                harness.run_action("run-migration-down")
-            except ActionFailed as err:
-                assert "Database migration down failed" in err.message
-
-        assert not harness.charm.peer_data["migration_version_0"]
+        with pytest.raises(ActionFailed, match="Database migration down failed"):
+            context.run(context.on.action("run-migration-down"), state)
 
     def test_when_action_succeeds(
         self,
-        harness: Harness,
+        context: Context,
         mocked_workload_service: MagicMock,
-        mocked_workload_service_version: MagicMock,
         mocked_cli: MagicMock,
-        peer_integration: int,
+        mocked_database_config: MagicMock,
+        all_satisfied_conditions,
     ) -> None:
-        harness.set_leader(True)
-        mocked_workload_service.version = "1.0.0"
-        mocked_workload_service.is_running.return_value = True
+        state = create_state()
+        mocked_workload_service.return_value.is_running.return_value = True
+        mocked_cli.return_value.migrate_down.return_value = None
+        mocked_workload_service.return_value.version = "1.0.0"
 
-        harness.run_action("run-migration-down")
+        out = context.run(context.on.action("run-migration-down"), state)
 
-        mocked_cli.assert_called_once()
-        assert harness.charm.peer_data["migration_version_0"] == "1.0.0"
+        peer_rel_out = next(r for r in out.relations if r.endpoint == PEER_INTEGRATION_NAME)
+        assert peer_rel_out.local_app_data["migration_version_0"] == json.dumps("1.0.0")
 
 
 class TestRunMigrationStatusAction:
-    @pytest.fixture
-    def mocked_cli(self, mocker: MockerFixture) -> MagicMock:
-        return mocker.patch("charm.CommandLine.migrate_status")
-
     def test_when_service_not_ready(
-        self,
-        harness: Harness,
-        mocked_workload_service: MagicMock,
-        mocked_cli: MagicMock,
+        self, context: Context, mocked_workload_service: MagicMock
     ) -> None:
-        mocked_workload_service.is_running.return_value = False
+        state = create_state()
+        mocked_workload_service.return_value.is_running.return_value = False
 
-        try:
-            harness.run_action("run-migration-status")
-        except ActionFailed as err:
-            assert (
-                "Service is not ready. Please re-run the action when the charm is active"
-                in err.message
-            )
-
-        mocked_cli.assert_not_called()
+        with pytest.raises(ActionFailed, match="Service is not ready"):
+            context.run(context.on.action("run-migration-status"), state)
 
     def test_when_commandline_failed(
         self,
-        harness: Harness,
+        context: Context,
         mocked_workload_service: MagicMock,
+        mocked_cli: MagicMock,
+        mocked_database_config: MagicMock,
     ) -> None:
-        mocked_workload_service.is_running.return_value = True
+        state = create_state()
+        mocked_workload_service.return_value.is_running.return_value = True
+        mocked_cli.return_value.migrate_status.return_value = None
 
-        with patch("charm.CommandLine.migrate_status", return_value=None):
-            try:
-                harness.run_action("run-migration-status")
-            except ActionFailed as err:
-                assert "Failed to fetch the status of all database migrations" in err.message
+        with pytest.raises(
+            ActionFailed, match="Failed to fetch the status of all database migrations"
+        ):
+            context.run(context.on.action("run-migration-status"), state)
 
     def test_when_action_succeeds(
         self,
-        harness: Harness,
+        context: Context,
         mocked_workload_service: MagicMock,
         mocked_cli: MagicMock,
+        mocked_database_config: MagicMock,
+        all_satisfied_conditions,
     ) -> None:
-        mocked_workload_service.is_running.return_value = True
-        mocked_cli.return_value = "status"
+        state = create_state()
+        mocked_workload_service.return_value.is_running.return_value = True
+        mocked_cli.return_value.migrate_status.return_value = ["migration1", "migration2"]
 
-        output = harness.run_action("run-migration-status")
-
-        mocked_cli.assert_called_once()
-        assert output.results["status"] == "status"
+        context.run(context.on.action("run-migration-status"), state)

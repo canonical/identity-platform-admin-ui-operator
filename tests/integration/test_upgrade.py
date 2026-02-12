@@ -37,15 +37,37 @@ class TestUpgrade:
     def integrate_dependencies(self, juju: jubilant.Juju) -> None:
         juju.integrate(f"{self.hydra_app_name}:pg-database", f"{self.db_app_name}:database")
         juju.integrate(f"{self.kratos_app_name}:pg-database", f"{self.db_app_name}:database")
-        juju.integrate(f"{self.kratos_app_name}:hydra-endpoint-info", f"{self.hydra_app_name}:hydra-endpoint-info")
-        juju.integrate(f"{self.hydra_app_name}:public-ingress", f"{self.public_traefik_app_name}:ingress")
-        juju.integrate(f"{self.kratos_app_name}:public-ingress", f"{self.public_traefik_app_name}:ingress")
-        juju.integrate(f"{self.login_ui_app_name}:ingress", f"{self.public_traefik_app_name}:ingress")
-        juju.integrate(f"{self.login_ui_app_name}:hydra-endpoint-info", f"{self.hydra_app_name}:hydra-endpoint-info")
-        juju.integrate(f"{self.login_ui_app_name}:ui-endpoint-info", f"{self.hydra_app_name}:ui-endpoint-info")
-        juju.integrate(f"{self.login_ui_app_name}:ui-endpoint-info", f"{self.kratos_app_name}:ui-endpoint-info")
-        juju.integrate(f"{self.login_ui_app_name}:kratos-info", f"{self.kratos_app_name}:kratos-info")
-        juju.integrate(f"{self.public_traefik_app_name}:certificates", f"{self.self_signed_certificates_app_name}:certificates")
+        juju.integrate(
+            f"{self.kratos_app_name}:hydra-endpoint-info",
+            f"{self.hydra_app_name}:hydra-endpoint-info",
+        )
+        juju.integrate(
+            f"{self.hydra_app_name}:public-ingress", f"{self.public_traefik_app_name}:ingress"
+        )
+        juju.integrate(
+            f"{self.kratos_app_name}:public-ingress", f"{self.public_traefik_app_name}:ingress"
+        )
+        juju.integrate(
+            f"{self.login_ui_app_name}:ingress", f"{self.public_traefik_app_name}:ingress"
+        )
+        juju.integrate(
+            f"{self.login_ui_app_name}:hydra-endpoint-info",
+            f"{self.hydra_app_name}:hydra-endpoint-info",
+        )
+        juju.integrate(
+            f"{self.login_ui_app_name}:ui-endpoint-info", f"{self.hydra_app_name}:ui-endpoint-info"
+        )
+        juju.integrate(
+            f"{self.login_ui_app_name}:ui-endpoint-info",
+            f"{self.kratos_app_name}:ui-endpoint-info",
+        )
+        juju.integrate(
+            f"{self.login_ui_app_name}:kratos-info", f"{self.kratos_app_name}:kratos-info"
+        )
+        juju.integrate(
+            f"{self.public_traefik_app_name}:certificates",
+            f"{self.self_signed_certificates_app_name}:certificates",
+        )
         juju.integrate(f"{self.admin_ui_app_name}:{DATABASE_INTEGRATION_NAME}", self.db_app_name)
         juju.integrate(
             f"{self.admin_ui_app_name}:{KRATOS_INFO_INTEGRATION_NAME}",

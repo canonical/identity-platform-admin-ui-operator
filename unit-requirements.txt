@@ -1,6 +1,6 @@
 -r requirements.txt
 coverage[toml]
-ipdb
+ops[testing]
 jsonschema
 pydantic<2.12
 pytest

@@ -11,10 +11,10 @@
       runs-on: ubuntu-latest
       steps:
         - name: Checkout
-          uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+          uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
         - name: HashiCorp - Setup Terraform
-          uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+          uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
 
         - name: Terraform Format
           id: fmt
@@ -31,7 +31,7 @@
           run: terraform validate -no-color
           working-directory: terraform
 
-        - uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
           if: github.event_name == 'pull_request'
           env:
             PLAN: "terraform\n${{ steps.plan.outputs.stdout }}"

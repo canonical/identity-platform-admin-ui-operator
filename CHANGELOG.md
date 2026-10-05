@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.3.0](https://github.com/canonical/identity-platform-admin-ui-operator/compare/v1.2.1...v1.3.0) (2026-10-05)
+
+
+### Features
+
+* upgrade to juju 1.0.0 ([10fcc71](https://github.com/canonical/identity-platform-admin-ui-operator/commit/10fcc711b5236d7c95dd887718f3143ee11ae85d))
+* upgrade to juju 1.0.0-beta4 ([b1b3c2a](https://github.com/canonical/identity-platform-admin-ui-operator/commit/b1b3c2aeff971abdf5cadd5d8ca6b6bc8d22a72d))
+
+
+### Bug Fixes
+
+* check if service failed to set status ([3b7cdb8](https://github.com/canonical/identity-platform-admin-ui-operator/commit/3b7cdb821c11b378575cf30954d81e27bc328397))
+* check service status before setting status ([1b532f8](https://github.com/canonical/identity-platform-admin-ui-operator/commit/1b532f8fb5b7a1228431a8c863065d0ae5996c17))
+* do not start the application service when the OpenFGA model creation is failed ([946cf23](https://github.com/canonical/identity-platform-admin-ui-operator/commit/946cf23b66ff87b2b3a79b1840655c60c2b3f282))
+* do not start the application service when the OpenFGA model creation is failed ([ccc7d53](https://github.com/canonical/identity-platform-admin-ui-operator/commit/ccc7d53655f6fe851a15ba0dbcf2f50043cc194c))
+* fix tls cert integration ([1422bd3](https://github.com/canonical/identity-platform-admin-ui-operator/commit/1422bd32c6799861655983d89487a0be4bed2218))
+* remove oathkeeper dependency ([bb1e755](https://github.com/canonical/identity-platform-admin-ui-operator/commit/bb1e755fc59f79e9ba9403c9d2d2cbf5ee16f799))
+* remove the redundant logging when OpenFGA model is not created ([305ade2](https://github.com/canonical/identity-platform-admin-ui-operator/commit/305ade20a756f708f17f6482734a3a6411face0a))
+* remove the redundant logging when OpenFGA model is not created ([ecdcd2e](https://github.com/canonical/identity-platform-admin-ui-operator/commit/ecdcd2e5b43f3fe318c0952fa63ec3eae72acb92))
+* stop service when database is gone ([dcc38af](https://github.com/canonical/identity-platform-admin-ui-operator/commit/dcc38af0a91f4175ef4df279c12c93794837bb6c))
+
 ## [1.2.1](https://github.com/canonical/identity-platform-admin-ui-operator/compare/v1.2.0...v1.2.1) (2025-07-22)
 
 

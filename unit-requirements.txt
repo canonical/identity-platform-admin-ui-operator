@@ -2,6 +2,6 @@
 coverage[toml]
 ops[testing]
 jsonschema
-pydantic<2.14
+pydantic<2.15
 pytest
 pytest-mock

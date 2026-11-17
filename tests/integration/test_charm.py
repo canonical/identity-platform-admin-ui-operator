@@ -67,7 +67,7 @@ def test_build_and_deploy(
         channel="latest/edge",
         trust=True,
     )
-    juju.integrate(OPENFGA_APP, DB_APP)
+    juju.integrate(f"{OPENFGA_APP}:database", f"{DB_APP}:database")
 
     # Wait for OpenFGA and DB to be ready before integrating with Admin UI
     juju.wait(

@@ -52,7 +52,7 @@ def test_build_and_deploy(
 ) -> None:
     # Deploy dependencies
     bundle_path = Path(__file__).parent / "identity_bundle.yaml"
-    juju.deploy(str(bundle_path), trust=True)
+    juju.deploy(str(bundle_path), trust=True, force=True)
 
     # Deploy local charm
     juju.deploy(

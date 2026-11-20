@@ -526,7 +526,7 @@ class TestHolisticHandler:
             out_state = context.run(context.on.config_changed(), state)
 
         mocked_workload_service.return_value.prepare_dir.assert_not_called()
-        assert out_state.deferred[0].name == event.path
+        assert out_state.deferred[0].name == event.name
 
     def test_when_all_conditions_satisfied(
         self,
